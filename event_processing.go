@@ -13,24 +13,147 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	gethAbi "github.com/ethereum/go-ethereum/accounts/abi"
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/google/uuid"
 
 	"github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm"
 	httpcap "github.com/smartcontractkit/cre-sdk-go/capabilities/networking/http"
 	"github.com/smartcontractkit/cre-sdk-go/cre"
 )
 
-// PreConsensusEventResults holds the encoded event and hash used for consensus.
-type PreConsensusEventResults struct {
-	Base64Event    string
-	Type           string
-	EventHash      gethCommon.Hash
-	BlockTimestamp uint64
-	Metadata       map[string]any
+func BuildVerifiableEvent(workflow Workflow, trigger Trigger, event Event, referenceData ReferenceData) VerifiableEvent {
+	return VerifiableEvent{
+		CreatedAt:     time.Now().UTC(),
+		Workflow:      workflow,
+		Trigger:       trigger,
+		Event:         event,
+		ReferenceData: referenceData,
+	}
 }
+
+func HashVerifiableEvent(verifiableEvent VerifiableEvent) PreConsensusEventResults {
+	marshalledVerifiableEvent, _ := json.Marshal(verifiableEvent)
+	base64VerifiableEvent := base64.StdEncoding.EncodeToString(marshalledVerifiableEvent)
+	typeName := verifiableEvent.Workflow.Domain + "." + verifiableEvent.Event.EventName
+	payloadToSign := typeName + "." + base64VerifiableEvent
+	eventHash := crypto.Keccak256Hash([]byte(payloadToSign))
+
+	return PreConsensusEventResults{
+		Base64Event:    base64VerifiableEvent,
+		Type:           typeName,
+		EventHash:      eventHash,
+		BlockTimestamp: uint64(verifiableEvent.Event.BlockTimestamp.Unix()),
+	}
+}
+
+func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre PreConsensusEventResults) (string, error) {
+	report, err := rt.GenerateReport(&cre.ReportRequest{
+		EncodedPayload: pre.EventHash.Bytes(),
+		EncoderName:    "evm",
+		SigningAlgo:    "ecdsa",
+		HashingAlgo:    "keccak256",
+	}).Await()
+	if err != nil {
+		return "", err
+	}
+	rpb := report.X_GeneratedCodeOnly_Unwrap()
+
+	// Convert ChainSelector to uint64
+	chainSelector, err := strconv.ParseUint(cfg.ChainSelector, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid chain selector: %w", err)
+	}
+
+	// Compose HTTP body
+	bodyMap := map[string]any{
+		"event_id":         uuid.New().String(),
+		"created_at":       int64(pre.BlockTimestamp) * 1000, // Convert seconds to milliseconds for server
+		"watcher_id":       cfg.WatcherID,
+		"domain":           cfg.Service,
+		"name":             cfg.DetectEventTriggerConfig.ContractEventName,
+		"chain_selector":   chainSelector,
+		"address":          cfg.DetectEventTriggerConfig.ContractAddress,
+		"ocr_report":       "0x" + hex.EncodeToString(rpb.RawReport),
+		"ocr_context":      "0x" + hex.EncodeToString(rpb.ReportContext),
+		"verifiable_event": pre.Base64Event,
+		"event_hash":       pre.EventHash.Hex(),
+		"signatures": func() []string {
+			out := make([]string, 0, len(rpb.Sigs))
+			for _, s := range rpb.Sigs {
+				out = append(out, "0x"+hex.EncodeToString(s.Signature))
+			}
+			return out
+		}(),
+	}
+	body, _ := json.Marshal(bodyMap)
+
+	// HTTP POST with identical consensus
+	client := &httpcap.Client{}
+	key := ResolveAPIKey(rt, cfg)
+
+	_, err = httpcap.SendRequest(cfg, rt, client, func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (*httpcap.Response, error) {
+		if key == "" {
+			return nil, fmt.Errorf("courier API key is required but not configured")
+		}
+		headers := map[string]string{
+			"Content-Type": "application/json",
+			"Api-Key":      key,
+		}
+		req := &httpcap.Request{
+			Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
+			Method:  "POST",
+			Headers: headers,
+			Body:    body,
+		}
+		return sr.SendRequest(req).Await()
+	}, cre.ConsensusIdenticalAggregation[*httpcap.Response]()).Await()
+	if err != nil {
+		return "", err
+	}
+	return pre.Base64Event, nil
+}
+
+func BuildWorkflow(cfg *Config, donID, domain string) Workflow {
+	return Workflow{
+		WorkflowName: cfg.WorkflowName,
+		WatcherID:    cfg.WatcherID,
+		DonID:        donID,
+		Domain:       domain,
+	}
+}
+
+func BuildTrigger(chainID string, payload *evm.Log) Trigger {
+	return Trigger{
+		ChainID:  chainID,
+		TxHash:   TxHashFromLog(payload),
+		LogIndex: uint64(payload.Index),
+	}
+}
+
+func BuildEvent(rt cre.Runtime, cfg *Config, payload *evm.Log) (Event, error) {
+	blockTimestamp := GetBlockTimestamp(rt, EnsureChainSelector(cfg, cfg.ChainSelector), payload.BlockNumber)
+	abi, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
+	if err != nil {
+		return Event{}, err
+	}
+	params, err := DecodeEventParams(abi, cfg.DetectEventTriggerConfig.ContractEventName, payload)
+	if err != nil {
+		return Event{}, err
+	}
+	return Event{
+		EventName:       cfg.DetectEventTriggerConfig.ContractEventName,
+		EventSignature:  GetEventSignature(cfg),
+		ContractAddress: gethCommon.BytesToAddress(payload.Address).Hex(),
+		TopicHash:       "0x" + hex.EncodeToString(payload.Topics[0]),
+		BlockNumber:     PBToUint64(payload.BlockNumber),
+		BlockTimestamp:  time.Unix(int64(blockTimestamp), 0).UTC(),
+		Args:            params,
+	}, nil
+}
+
+/* Old code */
 
 // toSnakeCase converts "CamelCase" -> "camel_case".
 func toSnakeCase(in string) string {
@@ -155,13 +278,6 @@ func SanitiseJSON(v any) any {
 	}
 }
 
-// CursorInfo contains parsed info from a "block-logIndex-txHash" string.
-type CursorInfo struct {
-	BlockNumber uint64
-	LogIndex    uint64
-	TxHash      string
-}
-
 // ParseCursor splits "block-logIndex-txHash".
 func ParseCursor(cursor string) (CursorInfo, error) {
 	parts := strings.Split(cursor, "-")
@@ -254,7 +370,6 @@ func BuildAndHashEventEnvelope(
 		Type:           typeName,
 		EventHash:      eventHash,
 		BlockTimestamp: timestamp,
-		Metadata:       metadata,
 	}, nil
 }
 

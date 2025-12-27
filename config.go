@@ -3,7 +3,9 @@ package workflows
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	gethAbi "github.com/ethereum/go-ethereum/accounts/abi"
 	"gopkg.in/yaml.v3"
 )
 
@@ -58,6 +60,23 @@ func GetContractABI(cfg *Config, contractName string) (string, error) {
 		b, _ := json.Marshal(v)
 		return string(b), nil
 	}
+}
+
+func GetEventSignature(cfg *Config) string {
+	abiJSON, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
+	if err != nil {
+		return ""
+	}
+
+	parsedABI, err := gethAbi.JSON(strings.NewReader(abiJSON))
+	if err != nil {
+		return ""
+	}
+	eventDef, ok := parsedABI.Events[cfg.DetectEventTriggerConfig.ContractEventName]
+	if !ok {
+		return ""
+	}
+	return eventDef.Sig
 }
 
 // ParseWorkflowConfig accepts YAML or JSON and returns a Config.
