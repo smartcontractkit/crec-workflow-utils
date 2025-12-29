@@ -11,14 +11,14 @@ import (
 // It mirrors the structure produced by our existing config.tmpl files and remains
 // compatible with server-side gomplate rendering used during e2e runs.
 type Config struct {
-	Network       string `yaml:"network"    json:"network"`
-	ChainID       string `yaml:"chainID"    json:"chainID"`
-	CourierURL    string `yaml:"courierURL" json:"courierURL"`
-	Service       string `yaml:"service"    json:"service"`
-	ApiKeySecret  string `yaml:"apiKeySecret,omitempty" json:"apiKeySecret,omitempty"`
-	ChainSelector string `yaml:"chainSelector" json:"chainSelector"`
-	WatcherID     string `yaml:"watcherID" json:"watcherID"`
-	WorkflowName  string `yaml:"workflowName" json:"workflowName"`
+	Network       string  `yaml:"network"                json:"network"`
+	ChainID       string  `yaml:"chainID"                json:"chainID"`
+	CourierURL    string  `yaml:"courierURL"             json:"courierURL"`
+	Service       *string `yaml:"service,omitempty"      json:"service,omitempty"`
+	ApiKeySecret  string  `yaml:"apiKeySecret,omitempty" json:"apiKeySecret,omitempty"`
+	ChainSelector string  `yaml:"chainSelector"          json:"chainSelector"`
+	WatcherID     string  `yaml:"watcherID"              json:"watcherID"`
+	WorkflowName  string  `yaml:"workflowName"           json:"workflowName"`
 
 	DetectEventTriggerConfig DetectEventTriggerConfig `yaml:"detectEventTriggerConfig" json:"detectEventTriggerConfig"`
 }

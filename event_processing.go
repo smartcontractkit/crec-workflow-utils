@@ -6,14 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math"
 	"math/big"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	gethAbi "github.com/ethereum/go-ethereum/accounts/abi"
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -196,7 +193,7 @@ func MustEvent(abiJSON, eventName string) gethAbi.Event {
 // BuildAndHashEventEnvelope builds the base64 verifiable-event JSON and computes keccak256(type+"."+b64).
 // Note: parameters and metadata are treated as read-only; they are not mutated.
 func BuildAndHashEventEnvelope(
-	service string,
+	service *string,
 	eventName string,
 	contractAddress string,
 	eventABIJSON string,
@@ -218,13 +215,15 @@ func BuildAndHashEventEnvelope(
 	}
 
 	event := map[string]any{
-		"service":      service,
 		"name":         eventName,
 		"address":      contractAddress,
 		"topic_hash":   eventABI.ID.Hex(),
 		"log_index":    logIndex,
 		"block_number": blockNumber,
 		"parameters":   parameters,
+	}
+	if service != nil {
+		event["service"] = *service
 	}
 
 	transaction := map[string]any{
@@ -245,7 +244,11 @@ func BuildAndHashEventEnvelope(
 
 	marshalledVerifiableEvent, _ := json.Marshal(verifiableEventBody)
 	base64VerifiableEvent := base64.StdEncoding.EncodeToString(marshalledVerifiableEvent)
-	typeName := service + "." + eventName
+	// Build typeName: if service is nil, use just eventName, otherwise use service.eventName
+	typeName := eventName
+	if service != nil {
+		typeName = *service + "." + eventName
+	}
 	payloadToSign := typeName + "." + base64VerifiableEvent
 	eventHash := crypto.Keccak256Hash([]byte(payloadToSign))
 
@@ -260,12 +263,12 @@ func BuildAndHashEventEnvelope(
 
 // ResolveAPIKey returns the API key to use for Courier requests.
 // Only the secret-based approach is supported:
-//   - cfg.ApiKeySecret MUST be set to the secret ID.
+//   - apiKeySecret MUST be set to the secret ID.
 //   - The secret MUST resolve via rt.GetSecret.
 //
 // If resolution fails, an empty string is returned and callers should error.
-func ResolveAPIKey(rt cre.Runtime, cfg *Config) string {
-	secretID := strings.TrimSpace(cfg.ApiKeySecret)
+func ResolveAPIKey(rt cre.Runtime, apiKeySecret string) string {
+	secretID := strings.TrimSpace(apiKeySecret)
 	if secretID == "" {
 		return ""
 	}
@@ -274,7 +277,7 @@ func ResolveAPIKey(rt cre.Runtime, cfg *Config) string {
 	s, err := rt.GetSecret(&cre.SecretRequest{Id: secretID}).Await()
 
 	if err != nil {
-		slog.Warn("failed to resolve API key secret", "error", err)
+		rt.Logger().Warn("ResolveAPIKey failed to get secret", "error", err)
 		return ""
 	}
 
@@ -296,20 +299,12 @@ func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre
 	}
 	rpb := report.X_GeneratedCodeOnly_Unwrap()
 
-	// Convert ChainSelector to uint64
-	chainSelector, err := strconv.ParseUint(cfg.ChainSelector, 10, 64)
-	if err != nil {
-		return "", fmt.Errorf("invalid chain selector: %w", err)
-	}
-
 	// Compose HTTP body
 	bodyMap := map[string]any{
-		"event_id":         uuid.New().String(),
 		"created_at":       int64(pre.BlockTimestamp) * 1000, // Convert seconds to milliseconds for server
 		"watcher_id":       cfg.WatcherID,
-		"domain":           cfg.Service,
 		"name":             eventName,
-		"chain_selector":   chainSelector,
+		"chain_selector":   cfg.ChainSelector,
 		"address":          address,
 		"ocr_report":       "0x" + hex.EncodeToString(rpb.RawReport),
 		"ocr_context":      "0x" + hex.EncodeToString(rpb.ReportContext),
@@ -323,42 +318,66 @@ func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre
 			return out
 		}(),
 	}
+	if cfg.Service != nil {
+		bodyMap["domain"] = *cfg.Service
+	}
 	body, _ := json.Marshal(bodyMap)
 
 	// HTTP POST with identical consensus
+	// We aggregate only the integer StatusCode to ensure compatibility with Identical consensus.
 	client := &httpcap.Client{}
-	key := ResolveAPIKey(rt, cfg)
+	key := ResolveAPIKey(rt, cfg.ApiKeySecret)
 
-	_, err = httpcap.SendRequest(cfg, rt, client, func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (*httpcap.Response, error) {
-		if key == "" {
-			return nil, fmt.Errorf("courier API key is required but not configured")
-		}
-		headers := map[string]string{
-			"Content-Type": "application/json",
-			"Api-Key":      key,
-		}
-		req := &httpcap.Request{
-			Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
-			Method:  "POST",
-			Headers: headers,
-			Body:    body,
-		}
-		return sr.SendRequest(req).Await()
-	}, cre.ConsensusIdenticalAggregation[*httpcap.Response]()).Await()
+	_, err = httpcap.SendRequest(
+		cfg,
+		rt,
+		client,
+		func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (int, error) {
+			if key == "" {
+				return 0, fmt.Errorf("courier API key is required but not configured")
+			}
+			headers := map[string]string{
+				"Content-Type": "application/json",
+				"Api-Key":      key,
+			}
+			req := &httpcap.Request{
+				Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
+				Method:  "POST",
+				Headers: headers,
+				Body:    body,
+			}
+			resp, err := sr.SendRequest(req).Await()
+			if err != nil {
+				return 0, err
+			}
+			if resp == nil {
+				return 0, fmt.Errorf("nil response")
+			}
+			// Treat any 4xx/5xx as an error (caller may retry).
+			if resp.StatusCode >= 400 {
+				return 0, fmt.Errorf("courier API responded with status %d", resp.StatusCode)
+			}
+			return int(resp.StatusCode), nil
+		},
+		cre.ConsensusIdenticalAggregation[int](),
+	).Await()
 	if err != nil {
 		return "", err
 	}
+
 	return pre.Base64Event, nil
 }
 
-// CheckResponse validates an HTTP response status code and returns it as int.
-// Returns an error if the status code exceeds int32 bounds.
-func CheckResponse(resp *httpcap.Response) (int, error) {
-	code := resp.StatusCode
-	if code > math.MaxInt32 {
-		return 0, fmt.Errorf("API responded with invalid status code %d", code)
+// CheckResponse validates the httpcap response and returns it unchanged if acceptable.
+func CheckResponse(resp *httpcap.Response) (*httpcap.Response, error) {
+	if resp == nil {
+		return nil, fmt.Errorf("nil response")
 	}
-	return int(code), nil
+	// Treat any 4xx/5xx as an error (caller may retry).
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("courier API responded with status %d", resp.StatusCode)
+	}
+	return resp, nil
 }
 
 // DecodeEventParams decodes an EVM log's topics/data into a named parameter map, using the provided ABI JSON and event-name.
