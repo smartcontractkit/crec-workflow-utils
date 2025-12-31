@@ -23,10 +23,14 @@ import (
 	"github.com/smartcontractkit/cre-sdk-go/cre"
 )
 
-func BuildVerifiableEvent(workflow Workflow, trigger Trigger, event Event, referenceData ReferenceData) VerifiableEvent {
+func BuildAndHashVerifiableEvent(domain string, trigger Trigger, event Event, referenceData ReferenceData) PreConsensusEventResults {
+	verifiableEvent := BuildVerifiableEvent(domain, trigger, event, referenceData)
+	return HashVerifiableEvent(verifiableEvent)
+}
+
+func BuildVerifiableEvent(domain string, trigger Trigger, event Event, referenceData ReferenceData) VerifiableEvent {
 	return VerifiableEvent{
-		CreatedAt:     time.Now().UTC(),
-		Workflow:      workflow,
+		Domain:        domain,
 		Trigger:       trigger,
 		Event:         event,
 		ReferenceData: referenceData,
@@ -36,7 +40,7 @@ func BuildVerifiableEvent(workflow Workflow, trigger Trigger, event Event, refer
 func HashVerifiableEvent(verifiableEvent VerifiableEvent) PreConsensusEventResults {
 	marshalledVerifiableEvent, _ := json.Marshal(verifiableEvent)
 	base64VerifiableEvent := base64.StdEncoding.EncodeToString(marshalledVerifiableEvent)
-	typeName := verifiableEvent.Workflow.Domain + "." + verifiableEvent.Event.EventName
+	typeName := verifiableEvent.Domain + "." + verifiableEvent.Event.EventName
 	payloadToSign := typeName + "." + base64VerifiableEvent
 	eventHash := crypto.Keccak256Hash([]byte(payloadToSign))
 
@@ -60,12 +64,6 @@ func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre PreConsensusEventRes
 	}
 	rpb := report.X_GeneratedCodeOnly_Unwrap()
 
-	// Convert ChainSelector to uint64
-	chainSelector, err := strconv.ParseUint(cfg.ChainSelector, 10, 64)
-	if err != nil {
-		return "", fmt.Errorf("invalid chain selector: %w", err)
-	}
-
 	// Compose HTTP body
 	bodyMap := map[string]any{
 		"event_id":         uuid.New().String(),
@@ -73,7 +71,7 @@ func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre PreConsensusEventRes
 		"watcher_id":       cfg.WatcherID,
 		"domain":           cfg.Service,
 		"name":             cfg.DetectEventTriggerConfig.ContractEventName,
-		"chain_selector":   chainSelector,
+		"chain_selector":   cfg.ChainSelector,
 		"address":          cfg.DetectEventTriggerConfig.ContractAddress,
 		"ocr_report":       "0x" + hex.EncodeToString(rpb.RawReport),
 		"ocr_context":      "0x" + hex.EncodeToString(rpb.ReportContext),
@@ -113,15 +111,6 @@ func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre PreConsensusEventRes
 		return "", err
 	}
 	return pre.Base64Event, nil
-}
-
-func BuildWorkflow(cfg *Config, donID, domain string) Workflow {
-	return Workflow{
-		WorkflowName: cfg.WorkflowName,
-		WatcherID:    cfg.WatcherID,
-		DonID:        donID,
-		Domain:       domain,
-	}
 }
 
 func BuildTrigger(chainID string, payload *evm.Log) Trigger {

@@ -182,7 +182,7 @@ var CurrencyCodes = map[uint8]string{
 	178: "ZWG",
 }
 
-func GetCurrencyCode(currencyId uint8) OffChainReferenceData {
+func GetCurrencyCodeAsOffChainReferenceData(currencyId uint8) OffChainReferenceData {
 	result := OffChainReferenceData{
 		Source: OffChainReferenceDataSource{
 			Type:       "ISO Standard",
@@ -199,4 +199,12 @@ func GetCurrencyCode(currencyId uint8) OffChainReferenceData {
 	}
 	result.Data["currency_code"] = currencyCode
 	return result
+}
+
+func GetCurrencyCode(currencyId uint8) string {
+	currencyCode, ok := CurrencyCodes[currencyId]
+	if !ok {
+		return "Unknown"
+	}
+	return currencyCode
 }
