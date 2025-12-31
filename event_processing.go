@@ -87,7 +87,7 @@ func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre PreConsensusEventRes
 
 	// HTTP POST with identical consensus
 	client := &httpcap.Client{}
-	key := ResolveAPIKey(rt, cfg)
+	key := ResolveAPIKey(rt, cfg.ApiKeySecret)
 
 	_, err = httpcap.SendRequest(cfg, rt, client, func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (*httpcap.Response, error) {
 		if key == "" {
