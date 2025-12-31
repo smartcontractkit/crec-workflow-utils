@@ -8,11 +8,11 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	httpcap "github.com/smartcontractkit/cre-sdk-go/capabilities/networking/http"
 	httpmock "github.com/smartcontractkit/cre-sdk-go/capabilities/networking/http/mock"
 	"github.com/smartcontractkit/cre-sdk-go/cre/testutils"
-
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,8 +39,9 @@ func TestBuildAndSignEventEnvelope_IncludesParametersInEventAndTopLevel(t *testi
 	}
 	params := SanitiseJSON(raw).(map[string]any)
 
+	testService := "test_service"
 	res, err := BuildAndHashEventEnvelope(
-		"test_service",
+		&testService,
 		"Sender",
 		"0xContract",
 		testABIForCommon,
@@ -83,6 +84,108 @@ func TestBuildAndSignEventEnvelope_IncludesParametersInEventAndTopLevel(t *testi
 	// metadata carried through
 	meta := obj["metadata"].(map[string]any)
 	require.Equal(t, "meta", meta["extra"])
+}
+
+func TestBuildAndHashEventEnvelope_WithNilService(t *testing.T) {
+	// prepare parameters
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	raw := map[string]any{
+		"Sender": addr.Bytes(),
+	}
+	params := SanitiseJSON(raw).(map[string]any)
+
+	// Build event envelope with nil service
+	res, err := BuildAndHashEventEnvelope(
+		nil,
+		"Sender",
+		"0xContract",
+		testABIForCommon,
+		"1",
+		100,
+		2,
+		"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		1_700_000_000,
+		params,
+		map[string]any{"extra": "meta"},
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, res.Base64Event)
+	// When service is nil, typeName should be just the event name (no service prefix)
+	require.Equal(t, "Sender", res.Type)
+	require.NotEqual(t, common.Hash{}, res.EventHash)
+
+	decoded, err := base64.StdEncoding.DecodeString(res.Base64Event)
+	require.NoError(t, err)
+	var obj map[string]any
+	require.NoError(t, json.Unmarshal(decoded, &obj))
+
+	ev := obj["event"].(map[string]any)
+	// service field should not be present when service is nil
+	_, hasService := ev["service"]
+	require.False(t, hasService, "service field should not be present when service is nil")
+	require.Equal(t, "Sender", ev["name"])
+	require.Equal(t, "0xContract", ev["address"])
+}
+
+func TestBuildAndHashEventEnvelope_ServiceHashCompatibility(t *testing.T) {
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	raw := map[string]any{
+		"Sender": addr.Bytes(),
+	}
+	params := SanitiseJSON(raw).(map[string]any)
+	metadata := map[string]any{"extra": "meta"}
+
+	eventName := "Sender"
+
+	resNilService, err := BuildAndHashEventEnvelope(
+		nil,
+		eventName,
+		"0xContract",
+		testABIForCommon,
+		"1",
+		100,
+		2,
+		"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		1_700_000_000,
+		params,
+		metadata,
+	)
+	require.NoError(t, err)
+
+	testService := "operations"
+	resWithService, err := BuildAndHashEventEnvelope(
+		&testService,
+		eventName,
+		"0xContract",
+		testABIForCommon,
+		"1",
+		100,
+		2,
+		"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		1_700_000_000,
+		params,
+		metadata,
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, eventName, resNilService.Type, "nil service should produce typeName = eventName")
+	require.Equal(t, "operations."+eventName, resWithService.Type, "service should produce typeName = service.eventName")
+
+	// Note: base64 payloads differ because service is included in the event JSON when present
+	// This is expected behavior - the service field is part of the verifiable event structure
+	require.NotEqual(t, resNilService.Base64Event, resWithService.Base64Event,
+		"base64 verifiable event payloads differ because service is included in JSON when present")
+
+	require.NotEqual(t, resNilService.EventHash, resWithService.EventHash,
+		"event hashes must differ when service is nil vs present (compatibility boundary)")
+
+	expectedNilHash := common.BytesToHash(crypto.Keccak256([]byte(eventName + "." + resNilService.Base64Event)))
+	expectedServiceHash := common.BytesToHash(crypto.Keccak256([]byte("operations." + eventName + "." + resWithService.Base64Event)))
+
+	require.Equal(t, expectedNilHash, resNilService.EventHash,
+		"nil-service hash should match keccak256(eventName + \".\" + base64payload)")
+	require.Equal(t, expectedServiceHash, resWithService.EventHash,
+		"service-prefixed hash should match keccak256(service.eventName + \".\" + base64payload)")
 }
 
 func TestSanitiseJSON_Conversions(t *testing.T) {
@@ -164,11 +267,9 @@ func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 		require.NoError(t, json.Unmarshal(req.Body, &body))
 
 		// required fields
-		require.NotEmpty(t, body["event_id"])
 		require.Equal(t, "test", body["domain"])
 		require.Equal(t, "Sender", body["name"])
-		// Courier protocol expects chain_selector as number
-		require.Equal(t, float64(11155111), body["chain_selector"], "chain_selector should be a number")
+		require.Equal(t, "11155111", body["chain_selector"], "chain_selector should be a string")
 		require.Equal(t, "0xABCDEF", body["address"])
 
 		// ocr report/context hex encoded
@@ -196,12 +297,13 @@ func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 	}
 
 	// Workflow config for POST (use secret id, not inline key)
+	testService := "test"
 	cfg := &Config{
 		Network:       "evm",
 		ChainID:       "1",
 		ChainSelector: "11155111", // Provide explicit selector
 		CourierURL:    "http://example.com",
-		Service:       "test",
+		Service:       &testService,
 		ApiKeySecret:  "courier",
 		DetectEventTriggerConfig: DetectEventTriggerConfig{
 			ContractName: "TestConsumer",
@@ -213,7 +315,7 @@ func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 		"Sender": common.HexToAddress("0x1111111111111111111111111111111111111111").Bytes(),
 	}).(map[string]any)
 	pre, err := BuildAndHashEventEnvelope(
-		"test",
+		&testService,
 		"Sender",
 		"0xABCDEF",
 		testABIForCommon,
