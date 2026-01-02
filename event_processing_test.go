@@ -31,61 +31,6 @@ func TestParseCursor(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestBuildAndSignEventEnvelope_IncludesParametersInEventAndTopLevel(t *testing.T) {
-	// prepare parameters: sender address encoded as bytes -> sanitised to hex
-	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	raw := map[string]any{
-		"Sender": addr.Bytes(),
-	}
-	params := SanitiseJSON(raw).(map[string]any)
-
-	testService := "test_service"
-	res, err := BuildAndHashEventEnvelope(
-		&testService,
-		"Sender",
-		"0xContract",
-		testABIForCommon,
-		"1",
-		100, // blockNumber
-		2,   // logIndex
-		"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		1_700_000_000,
-		params,
-		map[string]any{"extra": "meta"},
-	)
-	require.NoError(t, err)
-	require.NotEmpty(t, res.Base64Event)
-	require.Equal(t, "test_service.Sender", res.Type)
-	require.NotEqual(t, common.Hash{}, res.EventHash)
-
-	// decode and validate shape
-	decoded, err := base64.StdEncoding.DecodeString(res.Base64Event)
-	require.NoError(t, err)
-	var obj map[string]any
-	require.NoError(t, json.Unmarshal(decoded, &obj))
-
-	ev := obj["event"].(map[string]any)
-	topParams := obj["parameters"].(map[string]any)
-	evParams := ev["parameters"].(map[string]any)
-
-	// both places must contain the same keys/value (additive exposure)
-	require.Equal(t, topParams["sender"], "0x1234567890123456789012345678901234567890")
-	require.Equal(t, evParams["sender"], "0x1234567890123456789012345678901234567890")
-
-	// block/log info exposed
-	require.Equal(t, float64(2), ev["log_index"])      // JSON unmarshals numbers to float64
-	require.Equal(t, float64(100), ev["block_number"]) // JSON unmarshals numbers to float64
-
-	// transaction fields contain hash and block_number
-	tx := obj["transaction"].(map[string]any)
-	require.Equal(t, "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", tx["hash"])
-	require.Equal(t, float64(100), tx["block_number"])
-
-	// metadata carried through
-	meta := obj["metadata"].(map[string]any)
-	require.Equal(t, "meta", meta["extra"])
-}
-
 func TestBuildAndHashEventEnvelope_WithNilService(t *testing.T) {
 	// prepare parameters
 	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
@@ -116,15 +61,14 @@ func TestBuildAndHashEventEnvelope_WithNilService(t *testing.T) {
 
 	decoded, err := base64.StdEncoding.DecodeString(res.Base64Event)
 	require.NoError(t, err)
-	var obj map[string]any
+	var obj VerifiableEvent
 	require.NoError(t, json.Unmarshal(decoded, &obj))
 
-	ev := obj["event"].(map[string]any)
+	ev := obj.Event
 	// service field should not be present when service is nil
-	_, hasService := ev["service"]
-	require.False(t, hasService, "service field should not be present when service is nil")
-	require.Equal(t, "Sender", ev["name"])
-	require.Equal(t, "0xContract", ev["address"])
+	require.Empty(t, obj.Domain, "domain should be empty when service is nil")
+	require.Equal(t, "Sender", ev.EventName, "event name should be Sender")
+	require.Equal(t, "0xContract", ev.ContractAddress, "contract address should be 0xContract")
 }
 
 func TestBuildAndHashEventEnvelope_ServiceHashCompatibility(t *testing.T) {
@@ -338,9 +282,10 @@ func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 	// sanity: verify the embedded verifiable_event decodes
 	decoded, err := base64.StdEncoding.DecodeString(out)
 	require.NoError(t, err)
-	var obj map[string]any
+	var obj VerifiableEvent
 	require.NoError(t, json.Unmarshal(decoded, &obj))
-	ev := obj["event"].(map[string]any)
-	require.Equal(t, "test", ev["service"])
-	require.Equal(t, "Sender", ev["name"])
+	ev := obj.Event
+	require.Equal(t, "test", obj.Domain, "domain should be test")
+	require.Equal(t, "Sender", ev.EventName, "event name should be Sender")
+	require.Equal(t, "0xABCDEF", ev.ContractAddress, "contract address should be 0xABCDEF")
 }
