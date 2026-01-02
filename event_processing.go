@@ -21,28 +21,35 @@ import (
 	"github.com/smartcontractkit/cre-sdk-go/cre"
 )
 
-func BuildAndHashVerifiableEvent(domain string, trigger Trigger, event Event, referenceData ReferenceData) PreConsensusEventResults {
-	verifiableEvent := BuildVerifiableEvent(domain, trigger, event, referenceData)
-	return HashVerifiableEvent(verifiableEvent)
+func BuildAndHashVerifiableEvent(domain string, trigger Trigger, event Event, referenceData ReferenceData) (VerifiableEventEvelope, error) {
+	verifiableEvent, err := BuildVerifiableEvent(domain, trigger, event, referenceData)
+	if err != nil {
+		return VerifiableEventEvelope{}, err
+	}
+	return HashVerifiableEvent(verifiableEvent), nil
 }
 
-func BuildVerifiableEvent(domain string, trigger Trigger, event Event, referenceData ReferenceData) VerifiableEvent {
+func BuildVerifiableEvent(domain string, trigger Trigger, event Event, referenceData ReferenceData) (VerifiableEvent, error) {
+	marshalledReferenceData, err := json.Marshal(referenceData)
+	if err != nil {
+		return VerifiableEvent{}, err
+	}
 	return VerifiableEvent{
 		Domain:        domain,
 		Trigger:       trigger,
 		Event:         event,
-		ReferenceData: referenceData,
-	}
+		ReferenceData: marshalledReferenceData,
+	}, nil
 }
 
-func HashVerifiableEvent(verifiableEvent VerifiableEvent) PreConsensusEventResults {
+func HashVerifiableEvent(verifiableEvent VerifiableEvent) VerifiableEventEvelope {
 	marshalledVerifiableEvent, _ := json.Marshal(verifiableEvent)
 	base64VerifiableEvent := base64.StdEncoding.EncodeToString(marshalledVerifiableEvent)
 	typeName := verifiableEvent.Domain + "." + verifiableEvent.Event.EventName
 	payloadToSign := typeName + "." + base64VerifiableEvent
 	eventHash := crypto.Keccak256Hash([]byte(payloadToSign))
 
-	return PreConsensusEventResults{
+	return VerifiableEventEvelope{
 		Base64Event:    base64VerifiableEvent,
 		Type:           typeName,
 		EventHash:      eventHash,
@@ -50,7 +57,7 @@ func HashVerifiableEvent(verifiableEvent VerifiableEvent) PreConsensusEventResul
 	}
 }
 
-func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre PreConsensusEventResults) (string, error) {
+func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre VerifiableEventEvelope) (string, error) {
 	report, err := rt.GenerateReport(&cre.ReportRequest{
 		EncodedPayload: pre.EventHash.Bytes(),
 		EncoderName:    "evm",
@@ -310,7 +317,7 @@ func BuildAndHashEventEnvelope(
 	timestamp uint64,
 	parameters map[string]any,
 	metadata map[string]any,
-) (PreConsensusEventResults, error) {
+) (VerifiableEventEvelope, error) {
 	eventABI := MustEvent(eventABIJSON, eventName)
 
 	if parameters == nil {
@@ -320,36 +327,47 @@ func BuildAndHashEventEnvelope(
 		metadata = map[string]any{}
 	}
 
-	event := map[string]any{
-		"name":         eventName,
-		"address":      contractAddress,
-		"topic_hash":   eventABI.ID.Hex(),
-		"log_index":    logIndex,
-		"block_number": blockNumber,
-		"parameters":   parameters,
+	// build trigger struct
+	trigger := Trigger{
+		ChainID:  chainID,
+		LogIndex: logIndex,
+		TxHash:   txHash,
 	}
+
+	// build event struct
+	event := Event{
+		BlockNumber:     blockNumber,
+		BlockTimestamp:  time.Unix(int64(timestamp), 0),
+		ContractAddress: contractAddress,
+		EventName:       eventName,
+		EventSignature:  eventABI.Sig,
+		TopicHash:       eventABI.ID.Hex(),
+		Args:            parameters,
+	}
+
+	marshalledReferenceData, err := json.Marshal(metadata)
+	if err != nil {
+		return VerifiableEventEvelope{}, err
+	}
+
+	verifiableEvent := VerifiableEvent{
+		Event:         event,
+		ReferenceData: marshalledReferenceData,
+		Trigger:       trigger,
+	}
+
 	if service != nil {
-		event["service"] = *service
+		verifiableEvent.Domain = *service
 	}
 
-	transaction := map[string]any{
-		"timestamp":    timestamp,
-		"chain_id":     chainID,
-		"hash":         txHash,
-		"block_number": blockNumber,
+	// marshal verifiable event
+	marshalledVerifiableEvent, err := json.Marshal(verifiableEvent)
+	if err != nil {
+		return VerifiableEventEvelope{}, err
 	}
 
-	createdAt := time.Unix(int64(timestamp), 0).UTC().Format(time.RFC3339Nano)
-	verifiableEventBody := map[string]any{
-		"created_at":  createdAt,
-		"event":       event,
-		"parameters":  parameters,
-		"transaction": transaction,
-		"metadata":    metadata,
-	}
-
-	marshalledVerifiableEvent, _ := json.Marshal(verifiableEventBody)
 	base64VerifiableEvent := base64.StdEncoding.EncodeToString(marshalledVerifiableEvent)
+
 	// Build typeName: if service is nil, use just eventName, otherwise use service.eventName
 	typeName := eventName
 	if service != nil {
@@ -358,7 +376,7 @@ func BuildAndHashEventEnvelope(
 	payloadToSign := typeName + "." + base64VerifiableEvent
 	eventHash := crypto.Keccak256Hash([]byte(payloadToSign))
 
-	return PreConsensusEventResults{
+	return VerifiableEventEvelope{
 		Base64Event:    base64VerifiableEvent,
 		Type:           typeName,
 		EventHash:      eventHash,
@@ -391,7 +409,7 @@ func ResolveAPIKey(rt cre.Runtime, apiKeySecret string) string {
 
 // PostSignedEvent performs identical-consensus report generation and posts the signed event
 // to the Courier /system/onchain-watcher-events endpoint. It returns the base64 verifiable event.
-func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre PreConsensusEventResults) (string, error) {
+func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre VerifiableEventEvelope) (string, error) {
 	// Generate CRE report with ECDSA signatures over the event hash
 	report, err := rt.GenerateReport(&cre.ReportRequest{
 		EncodedPayload: pre.EventHash.Bytes(),
