@@ -21,7 +21,7 @@ import (
 	"github.com/smartcontractkit/cre-sdk-go/cre"
 )
 
-func BuildAndHashVerifiableEvent(domain string, trigger Trigger, event Event, referenceData ReferenceData) (VerifiableEventEvelope, error) {
+func BuildAndHashVerifiableEvent(domain *string, trigger Trigger, event Event, referenceData ReferenceData) (VerifiableEventEvelope, error) {
 	verifiableEvent, err := BuildVerifiableEvent(domain, trigger, event, referenceData)
 	if err != nil {
 		return VerifiableEventEvelope{}, err
@@ -29,7 +29,7 @@ func BuildAndHashVerifiableEvent(domain string, trigger Trigger, event Event, re
 	return HashVerifiableEvent(verifiableEvent), nil
 }
 
-func BuildVerifiableEvent(domain string, trigger Trigger, event Event, referenceData ReferenceData) (VerifiableEvent, error) {
+func BuildVerifiableEvent(domain *string, trigger Trigger, event Event, referenceData ReferenceData) (VerifiableEvent, error) {
 	marshalledReferenceData, err := json.Marshal(referenceData)
 	if err != nil {
 		return VerifiableEvent{}, err
@@ -48,7 +48,10 @@ func BuildVerifiableEvent(domain string, trigger Trigger, event Event, reference
 func HashVerifiableEvent(verifiableEvent VerifiableEvent) VerifiableEventEvelope {
 	marshalledVerifiableEvent, _ := json.Marshal(verifiableEvent)
 	base64VerifiableEvent := base64.StdEncoding.EncodeToString(marshalledVerifiableEvent)
-	typeName := verifiableEvent.Domain + "." + verifiableEvent.Event.EventName
+	typeName := verifiableEvent.Event.EventName
+	if verifiableEvent.Domain != nil {
+		typeName = *verifiableEvent.Domain + "." + verifiableEvent.Event.EventName
+	}
 	payloadToSign := typeName + "." + base64VerifiableEvent
 	eventHash := crypto.Keccak256Hash([]byte(payloadToSign))
 
@@ -363,7 +366,7 @@ func BuildAndHashEventEnvelope(
 	}
 
 	if service != nil {
-		verifiableEvent.Domain = *service
+		verifiableEvent.Domain = service
 	}
 
 	// marshal verifiable event

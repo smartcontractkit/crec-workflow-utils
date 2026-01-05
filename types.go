@@ -28,7 +28,7 @@ type TypeAndValue struct {
 
 // VerifiableEvent is the core structure for verifiable events.
 type VerifiableEvent struct {
-	Domain        string       `json:"domain"`
+	Domain        *string      `json:"domain"`
 	Event         Event        `json:"event"`
 	ReferenceData TypeAndValue `json:"reference_data"`
 	Trigger       Trigger      `json:"trigger"`
