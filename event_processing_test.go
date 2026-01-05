@@ -288,4 +288,5 @@ func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 	require.Equal(t, "test", obj.Domain, "domain should be test")
 	require.Equal(t, "Sender", ev.EventName, "event name should be Sender")
 	require.Equal(t, "0xABCDEF", ev.ContractAddress, "contract address should be 0xABCDEF")
+	require.Equal(t, RawMessageTypeMap, obj.ReferenceData.Type, "reference data type should be map[string]interface {}")
 }

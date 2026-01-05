@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	PaymentRequestType = "payment_request"
+	RawMessageTypePaymentRequest RawMessageType = "payment_request"
+	RawMessageTypeReferenceData  RawMessageType = "reference_data"
 )
 
 // ReferenceData is a structured set of fields that can be used for reference data from on-chain and off-chain sources
@@ -15,7 +16,7 @@ const (
 type ReferenceData struct {
 	OnChain  []OnChainReferenceData  `json:"on_chain,omitempty"`  // The on-chain reference data.
 	OffChain []OffChainReferenceData `json:"off_chain,omitempty"` // The off-chain reference data.
-	Requests []OffChainRequest       `json:"requests,omitempty"`  // The requests to be forwarded to the off-chain applications.
+	Requests []TypeAndValue          `json:"requests,omitempty"`  // The requests to be forwarded to the off-chain applications.
 }
 
 // OnChainReferenceData is a structured set of fields that can be used for reference data from on-chain sources.
@@ -42,12 +43,6 @@ type OffChainReferenceData struct {
 type OffChainReferenceDataSource struct {
 	Type       string `json:"type"`       // The type of the off-chain reference data.
 	Identifier string `json:"identifier"` // Typically the URN for the off-chain source or identifier of the standardised data format.
-}
-
-// OffChainRequest represents a request to be forwarded to an off-chain application.
-type OffChainRequest struct {
-	Type    string          `json:"type"`    // The type of the off-chain request.
-	Request json.RawMessage `json:"request"` // The request to be forwarded to the off-chain application.
 }
 
 // PaymentRequest contains the details needed for an off-chain payment request.

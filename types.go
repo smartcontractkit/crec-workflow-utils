@@ -7,6 +7,12 @@ import (
 	gethCommon "github.com/ethereum/go-ethereum/common"
 )
 
+type RawMessageType string
+
+const (
+	RawMessageTypeMap RawMessageType = "map"
+)
+
 // CursorInfo contains parsed info from a "block-logIndex-txHash" string.
 type CursorInfo struct {
 	BlockNumber uint64
@@ -14,12 +20,18 @@ type CursorInfo struct {
 	TxHash      string
 }
 
+// TypeAndValue is a type that holds a type and a value.
+type TypeAndValue struct {
+	Type  RawMessageType  `json:"type"`
+	Value json.RawMessage `json:"value"`
+}
+
 // VerifiableEvent is the core structure for verifiable events.
 type VerifiableEvent struct {
-	Domain        string          `json:"domain"`
-	Event         Event           `json:"event"`
-	ReferenceData json.RawMessage `json:"reference_data"`
-	Trigger       Trigger         `json:"trigger"`
+	Domain        string       `json:"domain"`
+	Event         Event        `json:"event"`
+	ReferenceData TypeAndValue `json:"reference_data"`
+	Trigger       Trigger      `json:"trigger"`
 }
 
 // Trigger is the information about the trigger of the event.

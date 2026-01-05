@@ -35,10 +35,13 @@ func BuildVerifiableEvent(domain string, trigger Trigger, event Event, reference
 		return VerifiableEvent{}, err
 	}
 	return VerifiableEvent{
-		Domain:        domain,
-		Trigger:       trigger,
-		Event:         event,
-		ReferenceData: marshalledReferenceData,
+		Domain:  domain,
+		Trigger: trigger,
+		Event:   event,
+		ReferenceData: TypeAndValue{
+			Type:  RawMessageTypeReferenceData,
+			Value: marshalledReferenceData,
+		},
 	}, nil
 }
 
@@ -351,9 +354,12 @@ func BuildAndHashEventEnvelope(
 	}
 
 	verifiableEvent := VerifiableEvent{
-		Event:         event,
-		ReferenceData: marshalledReferenceData,
-		Trigger:       trigger,
+		Event: event,
+		ReferenceData: TypeAndValue{
+			Type:  RawMessageTypeMap,
+			Value: marshalledReferenceData,
+		},
+		Trigger: trigger,
 	}
 
 	if service != nil {
