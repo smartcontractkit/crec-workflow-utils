@@ -288,7 +288,7 @@ func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 	require.Equal(t, &testService, obj.Domain, "domain should be test")
 	require.Equal(t, "Sender", ev.EventName, "event name should be Sender")
 	require.Equal(t, "0xABCDEF", ev.ContractAddress, "contract address should be 0xABCDEF")
-	require.Equal(t, RawMessageTypeMap, obj.ReferenceData.Type, "reference data type should be map[string]interface {}")
+	require.Nil(t, obj.ReferenceData, "reference data should be nil")
 }
 
 func TestPostSignedEvent_ChainSelectorEnsuredString(t *testing.T) {
@@ -313,8 +313,8 @@ func TestPostSignedEvent_ChainSelectorEnsuredString(t *testing.T) {
 
 	testService := "test"
 	cfg := &Config{
-		Network:       "evm",
-		ChainID:       "1",
+		Network: "evm",
+		ChainID: "1",
 		// Large number as string.
 		// Even if the struct field was uint64 (simulated regression), the fix in PostSignedEvent ensures string.
 		ChainSelector: "16015286601757825753",
