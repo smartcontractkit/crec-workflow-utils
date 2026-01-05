@@ -344,3 +344,40 @@ func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 	require.Equal(t, "test", ev["service"])
 	require.Equal(t, "Sender", ev["name"])
 }
+
+func TestPostSignedEvent_ChainSelectorEnsuredString(t *testing.T) {
+	// This test verifies that even if ChainSelector looks like a number in the struct
+	// (it is string in Config, but we simulate potential regression or data oddities)
+	// it is serialized as a string in the JSON payload sent to Courier.
+
+	rt := testutils.NewRuntime(t, testutils.Secrets{
+		"": map[testutils.ID]string{"courier": "API-KEY"},
+	})
+	httpCap, err := httpmock.NewClientCapability(t)
+	require.NoError(t, err)
+	httpCap.SendRequest = func(_ context.Context, req *httpcap.Request) (*httpcap.Response, error) {
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(req.Body, &body))
+		// Strictly check type is string
+		_, ok := body["chain_selector"].(string)
+		require.True(t, ok, "chain_selector in JSON body must be a string")
+		require.Equal(t, "16015286601757825753", body["chain_selector"])
+		return &httpcap.Response{StatusCode: 200}, nil
+	}
+
+	testService := "test"
+	cfg := &Config{
+		Network:       "evm",
+		ChainID:       "1",
+		// Large number as string.
+		// Even if the struct field was uint64 (simulated regression), the fix in PostSignedEvent ensures string.
+		ChainSelector: "16015286601757825753",
+		CourierURL:    "http://example.com",
+		Service:       &testService,
+		ApiKeySecret:  "courier",
+	}
+
+	pre, _ := BuildAndHashEventEnvelope(&testService, "Sender", "0xABC", testABIForCommon, "1", 1, 1, "0x", 123, nil, nil)
+	_, err = PostSignedEvent(cfg, rt, "Sender", "0xABC", pre)
+	require.NoError(t, err)
+}

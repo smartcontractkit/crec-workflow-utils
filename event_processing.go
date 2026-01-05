@@ -301,13 +301,16 @@ func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre
 
 	// Compose HTTP body
 	bodyMap := map[string]any{
-		"created_at":       int64(pre.BlockTimestamp) * 1000, // Convert seconds to milliseconds for server
-		"watcher_id":       cfg.WatcherID,
-		"name":             eventName,
-		"chain_selector":   cfg.ChainSelector,
-		"address":          address,
-		"ocr_report":       "0x" + hex.EncodeToString(rpb.RawReport),
-		"ocr_context":      "0x" + hex.EncodeToString(rpb.ReportContext),
+		"created_at":     int64(pre.BlockTimestamp) * 1000, // Convert seconds to milliseconds for server
+		"watcher_id":     cfg.WatcherID,
+		"name":           eventName,
+		// Fix: Ensure chain_selector is strictly a string.
+		// The Courier API rejects numeric chain_selectors (error 400).
+		// While Config defines it as string, explicit formatting prevents regression if types change.
+		"chain_selector": fmt.Sprintf("%v", cfg.ChainSelector),
+		"address":        address,
+		"ocr_report":     "0x" + hex.EncodeToString(rpb.RawReport),
+		"ocr_context":    "0x" + hex.EncodeToString(rpb.ReportContext),
 		"verifiable_event": pre.Base64Event,
 		"event_hash":       pre.EventHash.Hex(),
 		"signatures": func() []string {
