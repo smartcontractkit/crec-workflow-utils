@@ -21,7 +21,7 @@ import (
 	"github.com/smartcontractkit/cre-sdk-go/cre"
 )
 
-func BuildAndHashVerifiableEvent(domain *string, trigger Trigger, event Event, referenceData ReferenceData) (VerifiableEventEvelope, error) {
+func BuildAndHashVerifiableEvent(domain *string, trigger Trigger, event Event, referenceData *ReferenceData) (VerifiableEventEvelope, error) {
 	verifiableEvent, err := BuildVerifiableEvent(domain, trigger, event, referenceData)
 	if err != nil {
 		return VerifiableEventEvelope{}, err
@@ -29,19 +29,23 @@ func BuildAndHashVerifiableEvent(domain *string, trigger Trigger, event Event, r
 	return HashVerifiableEvent(verifiableEvent), nil
 }
 
-func BuildVerifiableEvent(domain *string, trigger Trigger, event Event, referenceData ReferenceData) (VerifiableEvent, error) {
-	marshalledReferenceData, err := json.Marshal(referenceData)
-	if err != nil {
-		return VerifiableEvent{}, err
-	}
-	return VerifiableEvent{
-		Domain:  domain,
-		Trigger: trigger,
-		Event:   event,
-		ReferenceData: TypeAndValue{
+func BuildVerifiableEvent(domain *string, trigger Trigger, event Event, referenceData *ReferenceData) (VerifiableEvent, error) {
+	var refDataTypeAndValue *TypeAndValue
+	if referenceData != nil {
+		marshalledReferenceData, err := json.Marshal(*referenceData)
+		if err != nil {
+			return VerifiableEvent{}, err
+		}
+		refDataTypeAndValue = &TypeAndValue{
 			Type:  RawMessageTypeReferenceData,
 			Value: marshalledReferenceData,
-		},
+		}
+	}
+	return VerifiableEvent{
+		Domain:        domain,
+		Trigger:       trigger,
+		Event:         event,
+		ReferenceData: refDataTypeAndValue,
 	}, nil
 }
 
@@ -351,18 +355,22 @@ func BuildAndHashEventEnvelope(
 		Args:            parameters,
 	}
 
-	marshalledReferenceData, err := json.Marshal(metadata)
-	if err != nil {
-		return VerifiableEventEvelope{}, err
+	var metadataTypeAndValue *TypeAndValue
+	if len(metadata) > 0 {
+		marshalledMetadata, err := json.Marshal(metadata)
+		if err != nil {
+			return VerifiableEventEvelope{}, err
+		}
+		metadataTypeAndValue = &TypeAndValue{
+			Type:  RawMessageTypeMap,
+			Value: marshalledMetadata,
+		}
 	}
 
 	verifiableEvent := VerifiableEvent{
-		Event: event,
-		ReferenceData: TypeAndValue{
-			Type:  RawMessageTypeMap,
-			Value: marshalledReferenceData,
-		},
-		Trigger: trigger,
+		Event:         event,
+		ReferenceData: metadataTypeAndValue,
+		Trigger:       trigger,
 	}
 
 	if service != nil {
@@ -433,16 +441,16 @@ func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre
 
 	// Compose HTTP body
 	bodyMap := map[string]any{
-		"created_at":     int64(pre.BlockTimestamp) * 1000, // Convert seconds to milliseconds for server
-		"watcher_id":     cfg.WatcherID,
-		"name":           eventName,
+		"created_at": int64(pre.BlockTimestamp) * 1000, // Convert seconds to milliseconds for server
+		"watcher_id": cfg.WatcherID,
+		"name":       eventName,
 		// Fix: Ensure chain_selector is strictly a string.
 		// The Courier API rejects numeric chain_selectors (error 400).
 		// While Config defines it as string, explicit formatting prevents regression if types change.
-		"chain_selector": fmt.Sprintf("%v", cfg.ChainSelector),
-		"address":        address,
-		"ocr_report":     "0x" + hex.EncodeToString(rpb.RawReport),
-		"ocr_context":    "0x" + hex.EncodeToString(rpb.ReportContext),
+		"chain_selector":   fmt.Sprintf("%v", cfg.ChainSelector),
+		"address":          address,
+		"ocr_report":       "0x" + hex.EncodeToString(rpb.RawReport),
+		"ocr_context":      "0x" + hex.EncodeToString(rpb.ReportContext),
 		"verifiable_event": pre.Base64Event,
 		"event_hash":       pre.EventHash.Hex(),
 		"signatures": func() []string {
