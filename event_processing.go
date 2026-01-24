@@ -13,67 +13,82 @@ import (
 
 	gethAbi "github.com/ethereum/go-ethereum/accounts/abi"
 	gethCommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/google/uuid"
 
 	"github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm"
 	httpcap "github.com/smartcontractkit/cre-sdk-go/capabilities/networking/http"
 	"github.com/smartcontractkit/cre-sdk-go/cre"
+	"github.com/smartcontractkit/crec-api-go/models"
 )
 
-func BuildAndHashVerifiableEvent(domain *string, trigger Trigger, event Event, referenceData *ReferenceData) (VerifiableEventEvelope, error) {
-	verifiableEvent, err := BuildVerifiableEvent(domain, trigger, event, referenceData)
+// BuildEVMEventFromLog constructs an EVMEvent from the given evm.Log payload,
+// decoding parameters using the contract ABI specified in cfg.
+func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*models.EVMEvent, error) {
+	blockTimestamp := GetBlockTimestamp(rt, EnsureChainSelector(cfg, cfg.ChainSelector), payload.BlockNumber)
+	abi, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
 	if err != nil {
-		return VerifiableEventEvelope{}, err
+		return nil, err
 	}
-	return HashVerifiableEvent(verifiableEvent), nil
-}
-
-func BuildVerifiableEvent(domain *string, trigger Trigger, event Event, referenceData *ReferenceData) (VerifiableEvent, error) {
-	var refDataTypeAndValue *TypeAndValue
-	if referenceData != nil {
-		marshalledReferenceData, err := json.Marshal(*referenceData)
-		if err != nil {
-			return VerifiableEvent{}, err
-		}
-		refDataTypeAndValue = &TypeAndValue{
-			Type:  RawMessageTypeReferenceData,
-			Value: marshalledReferenceData,
-		}
+	params, err := DecodeEventParams(abi, cfg.DetectEventTriggerConfig.ContractEventName, payload)
+	if err != nil {
+		return nil, err
 	}
-	return VerifiableEvent{
-		Domain:        domain,
-		Trigger:       trigger,
-		Event:         event,
-		ReferenceData: refDataTypeAndValue,
+	return &models.EVMEvent{
+		Address:        gethCommon.BytesToAddress(payload.Address).Hex(),
+		BlockNumber:    PBToUint64(payload.BlockNumber),
+		BlockTimestamp: blockTimestamp,
+		ChainId:        cfg.ChainID,
+		EventSignature: GetEventSignature(cfg),
+		LogIndex:       payload.Index,
+		Params:         &params,
+		TopicHash:      "0x" + hex.EncodeToString(payload.Topics[0]),
+		TxHash:         "0x" + hex.EncodeToString(payload.TxHash),
 	}, nil
 }
 
-func HashVerifiableEvent(verifiableEvent VerifiableEvent) VerifiableEventEvelope {
-	marshalledVerifiableEvent, _ := json.Marshal(verifiableEvent)
-	base64VerifiableEvent := base64.StdEncoding.EncodeToString(marshalledVerifiableEvent)
-	typeName := verifiableEvent.Event.EventName
-	if verifiableEvent.Domain != nil {
-		typeName = *verifiableEvent.Domain + "." + verifiableEvent.Event.EventName
+// BuildVerifiableEventForEVMEvent constructs a VerifiableEvent for the given EVMEvent,
+// with the specified service, name, and additional data.
+func BuildVerifiableEventForEVMEvent(
+	cfg *Config, ev *models.EVMEvent, service string, name string, data *map[string]interface{},
+) (*models.VerifiableEvent, error) {
+	chainFamily := "evm"
+	chainSelector := cfg.ChainSelector
+	ve := models.VerifiableEvent{
+		ChainFamily:   &chainFamily,
+		ChainSelector: &chainSelector,
+		Data:          data,
+		Name:          name,
+		Service:       service,
+		Timestamp:     time.Unix(int64(ev.BlockTimestamp), 0).UTC(),
+		ChainEvent:    &models.VerifiableEvent_ChainEvent{},
 	}
-	payloadToSign := typeName + "." + base64VerifiableEvent
-	eventHash := crypto.Keccak256Hash([]byte(payloadToSign))
-
-	return VerifiableEventEvelope{
-		Base64Event:    base64VerifiableEvent,
-		Type:           typeName,
-		EventHash:      eventHash,
-		BlockTimestamp: uint64(verifiableEvent.Event.BlockTimestamp.Unix()),
+	err := ve.ChainEvent.FromEVMEvent(*ev)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set EVM event in VerifiableEvent: %w", err)
 	}
+	return &ve, nil
 }
 
-func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre VerifiableEventEvelope) (string, error) {
-	report, err := rt.GenerateReport(&cre.ReportRequest{
-		EncodedPayload: pre.EventHash.Bytes(),
-		EncoderName:    "evm",
-		SigningAlgo:    "ecdsa",
-		HashingAlgo:    "keccak256",
-	}).Await()
+// SignAndPostVerifiableEvent performs identical-consensus report generation and posts the signed event
+// to the Courier /system/onchain-watcher-events endpoint. It returns the base64 verifiable event.
+func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.VerifiableEvent) (string, error) {
+	encodedVerifiableEvent, err := EncodeVerifiableEvent(ve)
+	if err != nil {
+		return "", err
+	}
+
+	eventHash, err := ComputeEventHash(encodedVerifiableEvent)
+	if err != nil {
+		return "", err
+	}
+
+	report, err := rt.GenerateReport(
+		&cre.ReportRequest{
+			EncodedPayload: eventHash.Bytes(),
+			EncoderName:    "evm",
+			SigningAlgo:    "ecdsa",
+			HashingAlgo:    "keccak256",
+		},
+	).Await()
 	if err != nil {
 		return "", err
 	}
@@ -81,17 +96,10 @@ func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre VerifiableEventEvelo
 
 	// Compose HTTP body
 	bodyMap := map[string]any{
-		"event_id":         uuid.New().String(),
-		"created_at":       int64(pre.BlockTimestamp) * 1000, // Convert seconds to milliseconds for server
 		"watcher_id":       cfg.WatcherID,
-		"domain":           cfg.Service,
-		"name":             cfg.DetectEventTriggerConfig.ContractEventName,
-		"chain_selector":   cfg.ChainSelector,
-		"address":          cfg.DetectEventTriggerConfig.ContractAddress,
 		"ocr_report":       "0x" + hex.EncodeToString(rpb.RawReport),
 		"ocr_context":      "0x" + hex.EncodeToString(rpb.ReportContext),
-		"verifiable_event": pre.Base64Event,
-		"event_hash":       pre.EventHash.Hex(),
+		"verifiable_event": encodedVerifiableEvent,
 		"signatures": func() []string {
 			out := make([]string, 0, len(rpb.Sigs))
 			for _, s := range rpb.Sigs {
@@ -103,62 +111,44 @@ func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre VerifiableEventEvelo
 	body, _ := json.Marshal(bodyMap)
 
 	// HTTP POST with identical consensus
+	// We aggregate only the integer StatusCode to ensure compatibility with Identical consensus.
 	client := &httpcap.Client{}
-	// key := ResolveAPIKey(rt, cfg.ApiKeySecret)
-	key := "SYS-DEV-KEY"
 
-	_, err = httpcap.SendRequest(cfg, rt, client, func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (*httpcap.Response, error) {
-		if key == "" {
-			return nil, fmt.Errorf("courier API key is required but not configured")
-		}
-		headers := map[string]string{
-			"Content-Type": "application/json",
-			"Api-Key":      key,
-		}
-		req := &httpcap.Request{
-			Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
-			Method:  "POST",
-			Headers: headers,
-			Body:    body,
-		}
-		return sr.SendRequest(req).Await()
-	}, cre.ConsensusIdenticalAggregation[*httpcap.Response]()).Await()
+	_, err = httpcap.SendRequest(
+		cfg,
+		rt,
+		client,
+		func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (int, error) {
+			headers := map[string]string{
+				"Content-Type": "application/json",
+			}
+			req := &httpcap.Request{
+				Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
+				Method:  "POST",
+				Headers: headers,
+				Body:    body,
+			}
+			resp, err := sr.SendRequest(req).Await()
+			if err != nil {
+				return 0, err
+			}
+			if resp == nil {
+				return 0, fmt.Errorf("nil response")
+			}
+			// Treat any 4xx/5xx as an error (caller may retry).
+			if resp.StatusCode >= 400 {
+				return 0, fmt.Errorf("courier API responded with status %d", resp.StatusCode)
+			}
+			return int(resp.StatusCode), nil
+		},
+		cre.ConsensusIdenticalAggregation[int](),
+	).Await()
 	if err != nil {
 		return "", err
 	}
-	return pre.Base64Event, nil
-}
 
-func BuildTrigger(chainID string, payload *evm.Log) Trigger {
-	return Trigger{
-		ChainID:  chainID,
-		TxHash:   TxHashFromLog(payload),
-		LogIndex: uint64(payload.Index),
-	}
+	return eventHash.String(), nil
 }
-
-func BuildEvent(rt cre.Runtime, cfg *Config, payload *evm.Log) (Event, error) {
-	blockTimestamp := GetBlockTimestamp(rt, EnsureChainSelector(cfg, cfg.ChainSelector), payload.BlockNumber)
-	abi, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
-	if err != nil {
-		return Event{}, err
-	}
-	params, err := DecodeEventParams(abi, cfg.DetectEventTriggerConfig.ContractEventName, payload)
-	if err != nil {
-		return Event{}, err
-	}
-	return Event{
-		EventName:       cfg.DetectEventTriggerConfig.ContractEventName,
-		EventSignature:  GetEventSignature(cfg),
-		ContractAddress: gethCommon.BytesToAddress(payload.Address).Hex(),
-		TopicHash:       "0x" + hex.EncodeToString(payload.Topics[0]),
-		BlockNumber:     PBToUint64(payload.BlockNumber),
-		BlockTimestamp:  time.Unix(int64(blockTimestamp), 0).UTC(),
-		Args:            params,
-	}, nil
-}
-
-/* Old code */
 
 // toSnakeCase converts "CamelCase" -> "camel_case".
 func toSnakeCase(in string) string {
@@ -283,24 +273,6 @@ func SanitiseJSON(v any) any {
 	}
 }
 
-// ParseCursor splits "block-logIndex-txHash".
-func ParseCursor(cursor string) (CursorInfo, error) {
-	parts := strings.Split(cursor, "-")
-	if len(parts) != 3 {
-		return CursorInfo{}, fmt.Errorf("invalid cursor %s", cursor)
-	}
-	var ci CursorInfo
-	var err error
-	if _, err = fmt.Sscan(parts[0], &ci.BlockNumber); err != nil {
-		return CursorInfo{}, fmt.Errorf("invalid block number in cursor: %w", err)
-	}
-	if _, err = fmt.Sscan(parts[1], &ci.LogIndex); err != nil {
-		return CursorInfo{}, fmt.Errorf("invalid log index in cursor: %w", err)
-	}
-	ci.TxHash = parts[2]
-	return ci, nil
-}
-
 // MustEvent returns the ABI event by name (panics on error).
 func MustEvent(abiJSON, eventName string) gethAbi.Event {
 	parsedABI, err := gethAbi.JSON(strings.NewReader(abiJSON))
@@ -312,182 +284,6 @@ func MustEvent(abiJSON, eventName string) gethAbi.Event {
 		panic("event " + eventName + " not found in ABI")
 	}
 	return eventDef
-}
-
-// BuildAndHashEventEnvelope builds the base64 verifiable-event JSON and computes keccak256(type+"."+b64).
-// Note: parameters and metadata are treated as read-only; they are not mutated.
-func BuildAndHashEventEnvelope(
-	service *string,
-	eventName string,
-	contractAddress string,
-	eventABIJSON string,
-	chainID string,
-	blockNumber uint64,
-	logIndex uint64,
-	txHash string,
-	timestamp uint64,
-	parameters map[string]any,
-	metadata map[string]any,
-) (VerifiableEventEvelope, error) {
-	eventABI := MustEvent(eventABIJSON, eventName)
-
-	if parameters == nil {
-		parameters = map[string]any{}
-	}
-	if metadata == nil {
-		metadata = map[string]any{}
-	}
-
-	// build trigger struct
-	trigger := Trigger{
-		ChainID:  chainID,
-		LogIndex: logIndex,
-		TxHash:   txHash,
-	}
-
-	// build event struct
-	event := Event{
-		BlockNumber:     blockNumber,
-		BlockTimestamp:  time.Unix(int64(timestamp), 0),
-		ContractAddress: contractAddress,
-		EventName:       eventName,
-		EventSignature:  eventABI.Sig,
-		TopicHash:       eventABI.ID.Hex(),
-		Args:            parameters,
-	}
-
-	var metadataTypeAndValue *TypeAndValue
-	if len(metadata) > 0 {
-		marshalledMetadata, err := json.Marshal(metadata)
-		if err != nil {
-			return VerifiableEventEvelope{}, err
-		}
-		metadataTypeAndValue = &TypeAndValue{
-			Type:  RawMessageTypeMap,
-			Value: marshalledMetadata,
-		}
-	}
-
-	verifiableEvent := VerifiableEvent{
-		Event:         event,
-		ReferenceData: metadataTypeAndValue,
-		Trigger:       trigger,
-	}
-
-	if service != nil {
-		verifiableEvent.Domain = service
-	}
-
-	// marshal verifiable event
-	marshalledVerifiableEvent, err := json.Marshal(verifiableEvent)
-	if err != nil {
-		return VerifiableEventEvelope{}, err
-	}
-
-	base64VerifiableEvent := base64.StdEncoding.EncodeToString(marshalledVerifiableEvent)
-
-	// Build typeName: if service is nil, use just eventName, otherwise use service.eventName
-	typeName := eventName
-	if service != nil {
-		typeName = *service + "." + eventName
-	}
-	payloadToSign := typeName + "." + base64VerifiableEvent
-	eventHash := crypto.Keccak256Hash([]byte(payloadToSign))
-
-	return VerifiableEventEvelope{
-		Base64Event:    base64VerifiableEvent,
-		Type:           typeName,
-		EventHash:      eventHash,
-		BlockTimestamp: timestamp,
-	}, nil
-}
-
-// PostSignedEvent performs identical-consensus report generation and posts the signed event
-// to the Courier /system/onchain-watcher-events endpoint. It returns the base64 verifiable event.
-func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre VerifiableEventEvelope) (string, error) {
-	// Generate CRE report with ECDSA signatures over the event hash
-	report, err := rt.GenerateReport(&cre.ReportRequest{
-		EncodedPayload: pre.EventHash.Bytes(),
-		EncoderName:    "evm",
-		SigningAlgo:    "ecdsa",
-		HashingAlgo:    "keccak256",
-	}).Await()
-	if err != nil {
-		return "", err
-	}
-	rpb := report.X_GeneratedCodeOnly_Unwrap()
-
-	// Compose HTTP body
-	bodyMap := map[string]any{
-		"created_at": int64(pre.BlockTimestamp) * 1000, // Convert seconds to milliseconds for server
-		"watcher_id": cfg.WatcherID,
-		"name":       eventName,
-		// Fix: Ensure chain_selector is strictly a string.
-		// The Courier API rejects numeric chain_selectors (error 400).
-		// While Config defines it as string, explicit formatting prevents regression if types change.
-		"chain_selector":   fmt.Sprintf("%v", cfg.ChainSelector),
-		"address":          address,
-		"ocr_report":       "0x" + hex.EncodeToString(rpb.RawReport),
-		"ocr_context":      "0x" + hex.EncodeToString(rpb.ReportContext),
-		"verifiable_event": pre.Base64Event,
-		"event_hash":       pre.EventHash.Hex(),
-		"signatures": func() []string {
-			out := make([]string, 0, len(rpb.Sigs))
-			for _, s := range rpb.Sigs {
-				out = append(out, "0x"+hex.EncodeToString(s.Signature))
-			}
-			return out
-		}(),
-	}
-	if cfg.Service != nil {
-		bodyMap["domain"] = *cfg.Service
-	}
-	body, _ := json.Marshal(bodyMap)
-
-	// HTTP POST with identical consensus
-	// We aggregate only the integer StatusCode to ensure compatibility with Identical consensus.
-	client := &httpcap.Client{}
-	// key := ResolveAPIKey(rt, cfg.ApiKeySecret)
-	key := "SYS-DEV-KEY"
-
-	_, err = httpcap.SendRequest(
-		cfg,
-		rt,
-		client,
-		func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (int, error) {
-			if key == "" {
-				return 0, fmt.Errorf("courier API key is required but not configured")
-			}
-			headers := map[string]string{
-				"Content-Type": "application/json",
-				"Api-Key":      key,
-			}
-			req := &httpcap.Request{
-				Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
-				Method:  "POST",
-				Headers: headers,
-				Body:    body,
-			}
-			resp, err := sr.SendRequest(req).Await()
-			if err != nil {
-				return 0, err
-			}
-			if resp == nil {
-				return 0, fmt.Errorf("nil response")
-			}
-			// Treat any 4xx/5xx as an error (caller may retry).
-			if resp.StatusCode >= 400 {
-				return 0, fmt.Errorf("courier API responded with status %d", resp.StatusCode)
-			}
-			return int(resp.StatusCode), nil
-		},
-		cre.ConsensusIdenticalAggregation[int](),
-	).Await()
-	if err != nil {
-		return "", err
-	}
-
-	return pre.Base64Event, nil
 }
 
 // CheckResponse validates the httpcap response and returns it unchanged if acceptable.
@@ -569,49 +365,4 @@ func DecodeEventParams(abiJSON, eventName string, log *evm.Log) (map[string]any,
 	}
 
 	return params, nil
-}
-
-// ComposeWorkflowEventMetadata builds a "workflowEvent" metadata payload similar to the
-// original event-listener-dta workflow, carrying human-friendly attributes.
-func ComposeWorkflowEventMetadata(component, chainID, eventType string, params map[string]any) map[string]any {
-	// Build attributes map[string]map[string]any
-	attrs := map[string]map[string]any{
-		"chain_id": {
-			"key":        "chain_id",
-			"value":      chainID,
-			"on_chain":   true,
-			"visibility": "info",
-		},
-		"event_type": {
-			"key":        "event_type",
-			"value":      eventType,
-			"on_chain":   true,
-			"visibility": "info",
-		},
-	}
-	for k, v := range params {
-		attrs[k] = map[string]any{
-			"key":        k,
-			"value":      fmt.Sprint(v),
-			"on_chain":   true,
-			"visibility": "info",
-		}
-	}
-
-	// process label: keep last segment of component (e.g. event-listener-dta -> dta)
-	label := component
-	if parts := strings.Split(component, "-"); len(parts) > 0 {
-		label = parts[len(parts)-1]
-	}
-
-	return map[string]any{
-		"chainId": chainID, // keep exactly as before; network is provided separately
-		"network": "evm",
-		"workflowEvent": map[string]any{
-			"attributes":       attrs,
-			"component":        component,
-			"event_type_label": eventType,
-			"process_labels":   []string{strings.ToLower(label), eventType},
-		},
-	}
 }

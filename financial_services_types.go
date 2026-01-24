@@ -4,12 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
+)
+
+type RawMessageType string
+
+const (
+	RawMessageTypeMap RawMessageType = "map"
 )
 
 const (
 	RawMessageTypePaymentRequest RawMessageType = "payment_request"
 	RawMessageTypeReferenceData  RawMessageType = "reference_data"
 )
+
+// TypeAndValue is a type that holds a type and a value.
+type TypeAndValue struct {
+	Type  RawMessageType  `json:"type"`
+	Value json.RawMessage `json:"value"`
+}
 
 // ReferenceData is a structured set of fields that can be used for reference data from on-chain and off-chain sources
 // as well as requests to be forwarded to off-chain applications.
@@ -95,4 +108,49 @@ type PaymentCallback struct {
 	ContractAddress   string `json:"contractAddress,omitempty"`   // The contract address to call. If empty, uses ApplicationAddr from PaymentRequest.
 	FunctionName      string `json:"functionName,omitempty"`      // The name of the function to call.
 	FunctionSignature string `json:"functionSignature,omitempty"` // The ABI function signature to call (e.g., "fulfillPayment(bytes32,uint256)")
+}
+
+// ComposeWorkflowEventMetadata builds a "workflowEvent" metadata payload similar to the
+// original event-listener-dta workflow, carrying human-friendly attributes.
+func ComposeWorkflowEventMetadata(component, chainID, eventType string, params map[string]any) map[string]any {
+	// Build attributes map[string]map[string]any
+	attrs := map[string]map[string]any{
+		"chain_id": {
+			"key":        "chain_id",
+			"value":      chainID,
+			"on_chain":   true,
+			"visibility": "info",
+		},
+		"event_type": {
+			"key":        "event_type",
+			"value":      eventType,
+			"on_chain":   true,
+			"visibility": "info",
+		},
+	}
+	for k, v := range params {
+		attrs[k] = map[string]any{
+			"key":        k,
+			"value":      fmt.Sprint(v),
+			"on_chain":   true,
+			"visibility": "info",
+		}
+	}
+
+	// process label: keep last segment of component (e.g. event-listener-dta -> dta)
+	label := component
+	if parts := strings.Split(component, "-"); len(parts) > 0 {
+		label = parts[len(parts)-1]
+	}
+
+	return map[string]any{
+		"chainId": chainID, // keep exactly as before; network is provided separately
+		"network": "evm",
+		"workflowEvent": map[string]any{
+			"attributes":       attrs,
+			"component":        component,
+			"event_type_label": eventType,
+			"process_labels":   []string{strings.ToLower(label), eventType},
+		},
+	}
 }
