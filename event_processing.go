@@ -104,6 +104,7 @@ func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre VerifiableEventEvelo
 
 	// HTTP POST with identical consensus
 	client := &httpcap.Client{}
+	// Hardcode API key secret
 	// key := ResolveAPIKey(rt, cfg.ApiKeySecret)
 	key := "SYS-DEV-KEY"
 
@@ -447,6 +448,7 @@ func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre
 	// HTTP POST with identical consensus
 	// We aggregate only the integer StatusCode to ensure compatibility with Identical consensus.
 	client := &httpcap.Client{}
+	// Hardcode API key secret
 	// key := ResolveAPIKey(rt, cfg.ApiKeySecret)
 	key := "SYS-DEV-KEY"
 
