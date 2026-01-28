@@ -191,18 +191,14 @@ func TestSanitiseJSON_Conversions(t *testing.T) {
 func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 	// Provide a runtime with a preloaded secret for the API key.
 	// Note: secrets are stored under empty namespace when GetSecret is called without one.
-	rt := testutils.NewRuntime(t, testutils.Secrets{
-		"": map[testutils.ID]string{
-			"courier": "API-KEY",
-		},
-	})
+	rt := testutils.NewRuntime(t, testutils.Secrets{})
 	// HTTP capability mock to capture POST payload
 	httpCap, err := httpmock.NewClientCapability(t)
 	require.NoError(t, err)
 	httpCap.SendRequest = func(_ context.Context, req *httpcap.Request) (*httpcap.Response, error) {
 		// headers
 		require.Equal(t, "application/json", req.Headers["Content-Type"])
-		require.Equal(t, "API-KEY", req.Headers["Api-Key"])
+		require.Equal(t, "SYS-DEV-KEY", req.Headers["Api-Key"])
 		require.Equal(t, "http://example.com/system/onchain-watcher-events", req.Url)
 		require.Equal(t, "POST", req.Method)
 
@@ -292,13 +288,7 @@ func TestPostSignedEvent_HTTPPayloadStructure(t *testing.T) {
 }
 
 func TestPostSignedEvent_ChainSelectorEnsuredString(t *testing.T) {
-	// This test verifies that even if ChainSelector looks like a number in the struct
-	// (it is string in Config, but we simulate potential regression or data oddities)
-	// it is serialized as a string in the JSON payload sent to Courier.
-
-	rt := testutils.NewRuntime(t, testutils.Secrets{
-		"": map[testutils.ID]string{"courier": "API-KEY"},
-	})
+	rt := testutils.NewRuntime(t, testutils.Secrets{})
 	httpCap, err := httpmock.NewClientCapability(t)
 	require.NoError(t, err)
 	httpCap.SendRequest = func(_ context.Context, req *httpcap.Request) (*httpcap.Response, error) {

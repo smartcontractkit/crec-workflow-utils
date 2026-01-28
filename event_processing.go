@@ -402,29 +402,6 @@ func BuildAndHashEventEnvelope(
 	}, nil
 }
 
-// ResolveAPIKey returns the API key to use for Courier requests.
-// Only the secret-based approach is supported:
-//   - apiKeySecret MUST be set to the secret ID.
-//   - The secret MUST resolve via rt.GetSecret.
-//
-// If resolution fails, an empty string is returned and callers should error.
-// func ResolveAPIKey(rt cre.Runtime, apiKeySecret string) string {
-// 	secretID := strings.TrimSpace(apiKeySecret)
-// 	if secretID == "" {
-// 		return ""
-// 	}
-
-// 	// WARN: the docs currently state that namespacing is optional, but it is actually currently hardcoded to 'main' and should not be included in fetching the secret
-// 	s, err := rt.GetSecret(&cre.SecretRequest{Id: secretID}).Await()
-
-// 	if err != nil {
-// 		rt.Logger().Warn("ResolveAPIKey failed to get secret", "error", err)
-// 		return ""
-// 	}
-
-// 	return s.Value
-// }
-
 // PostSignedEvent performs identical-consensus report generation and posts the signed event
 // to the Courier /system/onchain-watcher-events endpoint. It returns the base64 verifiable event.
 func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre VerifiableEventEvelope) (string, error) {
