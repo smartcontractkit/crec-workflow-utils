@@ -104,7 +104,8 @@ func GenerateAndPostReport(cfg *Config, rt cre.Runtime, pre VerifiableEventEvelo
 
 	// HTTP POST with identical consensus
 	client := &httpcap.Client{}
-	key := ResolveAPIKey(rt, cfg.ApiKeySecret)
+	// key := ResolveAPIKey(rt, cfg.ApiKeySecret)
+	key := "SYS-DEV-KEY"
 
 	_, err = httpcap.SendRequest(cfg, rt, client, func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (*httpcap.Response, error) {
 		if key == "" {
@@ -407,22 +408,22 @@ func BuildAndHashEventEnvelope(
 //   - The secret MUST resolve via rt.GetSecret.
 //
 // If resolution fails, an empty string is returned and callers should error.
-func ResolveAPIKey(rt cre.Runtime, apiKeySecret string) string {
-	secretID := strings.TrimSpace(apiKeySecret)
-	if secretID == "" {
-		return ""
-	}
+// func ResolveAPIKey(rt cre.Runtime, apiKeySecret string) string {
+// 	secretID := strings.TrimSpace(apiKeySecret)
+// 	if secretID == "" {
+// 		return ""
+// 	}
 
-	// WARN: the docs currently state that namespacing is optional, but it is actually currently hardcoded to 'main' and should not be included in fetching the secret
-	s, err := rt.GetSecret(&cre.SecretRequest{Id: secretID}).Await()
+// 	// WARN: the docs currently state that namespacing is optional, but it is actually currently hardcoded to 'main' and should not be included in fetching the secret
+// 	s, err := rt.GetSecret(&cre.SecretRequest{Id: secretID}).Await()
 
-	if err != nil {
-		rt.Logger().Warn("ResolveAPIKey failed to get secret", "error", err)
-		return ""
-	}
+// 	if err != nil {
+// 		rt.Logger().Warn("ResolveAPIKey failed to get secret", "error", err)
+// 		return ""
+// 	}
 
-	return s.Value
-}
+// 	return s.Value
+// }
 
 // PostSignedEvent performs identical-consensus report generation and posts the signed event
 // to the Courier /system/onchain-watcher-events endpoint. It returns the base64 verifiable event.
@@ -469,7 +470,8 @@ func PostSignedEvent(cfg *Config, rt cre.Runtime, eventName, address string, pre
 	// HTTP POST with identical consensus
 	// We aggregate only the integer StatusCode to ensure compatibility with Identical consensus.
 	client := &httpcap.Client{}
-	key := ResolveAPIKey(rt, cfg.ApiKeySecret)
+	// key := ResolveAPIKey(rt, cfg.ApiKeySecret)
+	key := "SYS-DEV-KEY"
 
 	_, err = httpcap.SendRequest(
 		cfg,
