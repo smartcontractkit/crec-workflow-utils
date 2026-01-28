@@ -3,6 +3,7 @@ package workflows
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -10,7 +11,12 @@ import (
 	"github.com/smartcontractkit/crec-api-go/models"
 )
 
+var ErrNilVerifiableEvent = errors.New("verifiable event cannot be nil")
+
 func EncodeVerifiableEvent(ve *models.VerifiableEvent) (string, error) {
+	if ve == nil {
+		return "", ErrNilVerifiableEvent
+	}
 	jsonString, err := json.Marshal(ve)
 	if err != nil {
 		return "", err

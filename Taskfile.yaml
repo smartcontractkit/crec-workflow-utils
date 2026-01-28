@@ -15,7 +15,7 @@ tasks:
     silent: true
     desc: "Run all tests"
     cmds:
-      - go test ./... -v
+      - go test -v ./...
 
   test:coverage:
     silent: true
