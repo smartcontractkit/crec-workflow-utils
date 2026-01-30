@@ -115,8 +115,8 @@ github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm v0.10.0 h1:G0
 github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm v0.10.0/go.mod h1:VVJ4mvA7wOU1Ic5b/vTaBMHEUysyxd0gdPPXkAu8CmY=
 github.com/smartcontractkit/cre-sdk-go/capabilities/networking/http v0.10.0 h1:nP6PVWrrTIICvjwQuFitsQecQWbqpPaYzaTEjx92eTQ=
 github.com/smartcontractkit/cre-sdk-go/capabilities/networking/http v0.10.0/go.mod h1:M83m3FsM1uqVu06OO58mKUSZJjjH8OGJsmvFpFlRDxI=
-github.com/smartcontractkit/crec-api-go v0.4.0 h1:N9gdy8/UPHgi152p/rwaO0E+7v4CULyKvuHAFApZ0m0=
-github.com/smartcontractkit/crec-api-go v0.4.0/go.mod h1:TuDZiMoStNQBv3HYA5pqpwPyecbMh8p5momO4b1A9Eg=
+github.com/smartcontractkit/crec-api-go v0.4.1 h1:8WF8AR0E6/obZ22hdHmUf8Kc0J8tUasuiDTeStn5zb0=
+github.com/smartcontractkit/crec-api-go v0.4.1/go.mod h1:TuDZiMoStNQBv3HYA5pqpwPyecbMh8p5momO4b1A9Eg=
 github.com/speakeasy-api/jsonpath v0.6.0 h1:IhtFOV9EbXplhyRqsVhHoBmmYjblIRh5D1/g8DHMXJ8=
 github.com/speakeasy-api/jsonpath v0.6.0/go.mod h1:ymb2iSkyOycmzKwbEAYPJV/yi2rSmvBCLZJcyD+VVWw=
 github.com/speakeasy-api/openapi-overlay v0.10.2 h1:VOdQ03eGKeiHnpb1boZCGm7x8Haj6gST0P3SGTX95GU=
