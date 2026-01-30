@@ -250,16 +250,19 @@ func TestEVMHelpers_TxHashFromLog(t *testing.T) {
 }
 
 func TestEVMHelpers_NewEVMLogFilter(t *testing.T) {
-	t.Run("creates filter with correct structure", func(t *testing.T) {
+	t.Run("creates filter with correct structure for multiple events", func(t *testing.T) {
 		contractAddr := "0x1234567890123456789012345678901234567890"
-		eventSigHash := []byte{0x01, 0x02, 0x03, 0x04}
+		eventSigHash1 := []byte{0x01, 0x02, 0x03, 0x04}
+		eventSigHash2 := []byte{0x05, 0x06, 0x07, 0x08}
 
-		result := workflows.NewEVMLogFilter(contractAddr, eventSigHash)
+		result := workflows.NewEVMLogFilter(contractAddr, [][]byte{eventSigHash1, eventSigHash2})
 
 		require.NotNil(t, result)
 		assert.Len(t, result.Addresses, 1)
 		assert.Len(t, result.Topics, 4)
-		assert.Equal(t, eventSigHash, result.Topics[0].Values[0])
+		assert.Len(t, result.Topics[0].Values, 2)
+		assert.Contains(t, result.Topics[0].Values, eventSigHash1)
+		assert.Contains(t, result.Topics[0].Values, eventSigHash2)
 		assert.Equal(t, evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED, result.Confidence)
 	})
 }
@@ -267,3 +270,4 @@ func TestEVMHelpers_NewEVMLogFilter(t *testing.T) {
 func ptrUint64(v uint64) *uint64 {
 	return &v
 }
+

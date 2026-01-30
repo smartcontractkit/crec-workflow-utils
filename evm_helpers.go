@@ -25,19 +25,19 @@ func PBToUint64(b *pb.BigInt) uint64 {
 	return u
 }
 
-// NewEVMLogFilter returns a FilterLogTriggerRequest for a single-address single-event subscription,
+// NewEVMLogFilter returns a FilterLogTriggerRequest for a single-address subscription for one or more events,
 // using FINALIZED confidence (common default across listeners).
 // Includes wildcard slots for up to 3 indexed parameters.
-func NewEVMLogFilter(contractAddr string, eventSigHash []byte) *evm.FilterLogTriggerRequest {
+func NewEVMLogFilter(contractAddr string, eventSigHashes [][]byte) *evm.FilterLogTriggerRequest {
 	return &evm.FilterLogTriggerRequest{
 		Addresses: [][]byte{
 			gethCommon.HexToAddress(contractAddr).Bytes(),
 		},
 		Topics: []*evm.TopicValues{
-			{Values: [][]byte{eventSigHash}},
-			{}, // Topic 1 (indexed param wildcard)
-			{}, // Topic 2 (indexed param wildcard)
-			{}, // Topic 3 (indexed param wildcard)
+			{Values: eventSigHashes}, // Topic 0: Event signatures (OR logic if multiple)
+			{},                       // Topic 1 (indexed param wildcard)
+			{},                       // Topic 2 (indexed param wildcard)
+			{},                       // Topic 3 (indexed param wildcard)
 		},
 		Confidence: evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED,
 	}
@@ -101,3 +101,4 @@ func TxHashFromLog(l *evm.Log) string {
 	}
 	return gethCommon.BytesToHash(l.TxHash).Hex()
 }
+

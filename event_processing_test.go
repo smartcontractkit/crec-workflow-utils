@@ -13,10 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testABIForCommon = `[
-  {"type":"event","name":"Sender","inputs":[{"name":"sender","type":"address","indexed":true,"internalType":"address"}],"anonymous":false}
-]`
-
 func TestSanitiseJSON_Conversions(t *testing.T) {
 	// prepare a structure with varied types
 	b20 := make([]byte, 20) // 20 bytes -> address-like
