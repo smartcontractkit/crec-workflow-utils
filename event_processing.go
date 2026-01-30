@@ -46,9 +46,10 @@ func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*model
 }
 
 // BuildVerifiableEventForEVMEvent constructs a VerifiableEvent for the given EVMEvent,
-// with the specified service, name, and additional data.
+// with the specified service (optional, can be nil for workflows not scoped to a service),
+// name, and additional data.
 func BuildVerifiableEventForEVMEvent(
-	cfg *Config, ev *models.EVMEvent, service string, name string, data *map[string]interface{},
+	cfg *Config, ev *models.EVMEvent, service *string, name string, data *map[string]interface{},
 ) (*models.VerifiableEvent, error) {
 	chainFamily := "evm"
 	chainSelector := cfg.ChainSelector

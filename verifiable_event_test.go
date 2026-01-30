@@ -29,7 +29,7 @@ func TestVerifiableEvent_EncodeVerifiableEvent(t *testing.T) {
 				ChainFamily:   ptr("evm"),
 				ChainSelector: ptr("11155111"),
 				Name:          "TestEvent",
-				Service:       "test-service",
+				Service:       ptr("test-service"),
 				Timestamp:     time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC),
 			},
 			wantErr: false,
@@ -40,12 +40,23 @@ func TestVerifiableEvent_EncodeVerifiableEvent(t *testing.T) {
 				ChainFamily:   ptr("evm"),
 				ChainSelector: ptr("1"),
 				Name:          "Transfer",
-				Service:       "dta",
+				Service:       ptr("dta"),
 				Timestamp:     time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
 				Data: &map[string]interface{}{
 					"amount": "1000000",
 					"sender": "0x1234",
 				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "encodes event with nil service",
+			ve: &models.VerifiableEvent{
+				ChainFamily:   ptr("evm"),
+				ChainSelector: ptr("11155111"),
+				Name:          "GenericEvent",
+				Service:       nil,
+				Timestamp:     time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC),
 			},
 			wantErr: false,
 		},
@@ -76,7 +87,12 @@ func TestVerifiableEvent_EncodeVerifiableEvent(t *testing.T) {
 			assert.Equal(t, tc.ve.ChainFamily, result.ChainFamily)
 			assert.Equal(t, tc.ve.ChainSelector, result.ChainSelector)
 			assert.Equal(t, tc.ve.Name, result.Name)
-			assert.Equal(t, tc.ve.Service, result.Service)
+			if tc.ve.Service == nil {
+				assert.Nil(t, result.Service)
+			} else {
+				require.NotNil(t, result.Service)
+				assert.Equal(t, *tc.ve.Service, *result.Service)
+			}
 		})
 	}
 }
@@ -95,7 +111,7 @@ func TestVerifiableEvent_DecodeVerifiableEvent(t *testing.T) {
 					ChainFamily:   ptr("evm"),
 					ChainSelector: ptr("11155111"),
 					Name:          "TestEvent",
-					Service:       "operations",
+					Service:       ptr("operations"),
 					Timestamp:     time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC),
 				}
 				b, _ := json.Marshal(ve)
@@ -108,7 +124,31 @@ func TestVerifiableEvent_DecodeVerifiableEvent(t *testing.T) {
 				assert.Equal(t, "evm", *ve.ChainFamily)
 				assert.Equal(t, "11155111", *ve.ChainSelector)
 				assert.Equal(t, "TestEvent", ve.Name)
-				assert.Equal(t, "operations", ve.Service)
+				require.NotNil(t, ve.Service)
+				assert.Equal(t, "operations", *ve.Service)
+			},
+		},
+		{
+			name: "decodes event with nil service",
+			setupEncoded: func() string {
+				ve := &models.VerifiableEvent{
+					ChainFamily:   ptr("evm"),
+					ChainSelector: ptr("11155111"),
+					Name:          "GenericEvent",
+					Service:       nil,
+					Timestamp:     time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC),
+				}
+				b, _ := json.Marshal(ve)
+				return base64.StdEncoding.EncodeToString(b)
+			},
+			wantErr: false,
+			validate: func(t *testing.T, ve *models.VerifiableEvent) {
+				require.NotNil(t, ve.ChainFamily)
+				require.NotNil(t, ve.ChainSelector)
+				assert.Equal(t, "evm", *ve.ChainFamily)
+				assert.Equal(t, "11155111", *ve.ChainSelector)
+				assert.Equal(t, "GenericEvent", ve.Name)
+				assert.Nil(t, ve.Service)
 			},
 		},
 		{
@@ -171,7 +211,7 @@ func TestVerifiableEvent_ComputeEventHash(t *testing.T) {
 					ChainFamily:   ptr("evm"),
 					ChainSelector: ptr("11155111"),
 					Name:          "TestEvent",
-					Service:       "operations",
+					Service:       ptr("operations"),
 					Timestamp:     time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC),
 				}
 				b, _ := json.Marshal(ve)
@@ -196,7 +236,7 @@ func TestVerifiableEvent_ComputeEventHash(t *testing.T) {
 					ChainFamily:   ptr("evm"),
 					ChainSelector: ptr("1"),
 					Name:          "DeterministicTest",
-					Service:       "test",
+					Service:       ptr("test"),
 				}
 				b, _ := json.Marshal(ve)
 				return base64.StdEncoding.EncodeToString(b)
@@ -207,7 +247,7 @@ func TestVerifiableEvent_ComputeEventHash(t *testing.T) {
 					ChainFamily:   ptr("evm"),
 					ChainSelector: ptr("1"),
 					Name:          "DeterministicTest",
-					Service:       "test",
+					Service:       ptr("test"),
 				}
 				b, _ := json.Marshal(ve)
 				encoded := base64.StdEncoding.EncodeToString(b)
@@ -252,7 +292,7 @@ func TestVerifiableEvent_RoundTrip(t *testing.T) {
 		ChainFamily:   ptr("evm"),
 		ChainSelector: ptr("11155111"),
 		Name:          "RequestCreated",
-		Service:       "dta",
+		Service:       ptr("dta"),
 		Timestamp:     time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC),
 		Data: &map[string]interface{}{
 			"requestId": "0x1234567890abcdef",
@@ -288,7 +328,7 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 		name        string
 		cfg         *workflows.Config
 		evmEvent    *models.EVMEvent
-		service     string
+		service     *string
 		eventName   string
 		data        *map[string]interface{}
 		wantErr     bool
@@ -311,7 +351,7 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 				TopicHash:      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
 				TxHash:         "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
 			},
-			service:   "dta",
+			service:   ptr("dta"),
 			eventName: "Transfer",
 			data: &map[string]interface{}{
 				"from":  "0x1111111111111111111111111111111111111111",
@@ -324,7 +364,8 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 				require.NotNil(t, ve.ChainSelector)
 				assert.Equal(t, "evm", *ve.ChainFamily)
 				assert.Equal(t, "11155111", *ve.ChainSelector)
-				assert.Equal(t, "dta", ve.Service)
+				require.NotNil(t, ve.Service)
+				assert.Equal(t, "dta", *ve.Service)
 				assert.Equal(t, "Transfer", ve.Name)
 				assert.NotNil(t, ve.Data)
 				assert.Equal(t, time.Unix(1700000000, 0).UTC(), ve.Timestamp)
@@ -346,7 +387,7 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 				TopicHash:      "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
 				TxHash:         "0x0000000000000000000000000000000000000000000000000000000000000001",
 			},
-			service:   "operations",
+			service:   ptr("operations"),
 			eventName: "Approval",
 			data:      nil,
 			wantErr:   false,
@@ -355,7 +396,8 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 				require.NotNil(t, ve.ChainSelector)
 				assert.Equal(t, "evm", *ve.ChainFamily)
 				assert.Equal(t, "1", *ve.ChainSelector)
-				assert.Equal(t, "operations", ve.Service)
+				require.NotNil(t, ve.Service)
+				assert.Equal(t, "operations", *ve.Service)
 				assert.Equal(t, "Approval", ve.Name)
 				assert.Nil(t, ve.Data)
 			},
@@ -376,13 +418,44 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 				TopicHash:      "0x1234",
 				TxHash:         "0x5678",
 			},
-			service:   "test",
+			service:   ptr("test"),
 			eventName: "TestEvent",
 			data:      nil,
 			wantErr:   false,
 			validate: func(t *testing.T, ve *models.VerifiableEvent) {
 				require.NotNil(t, ve.ChainSelector)
 				assert.Equal(t, "16015286601757825753", *ve.ChainSelector)
+			},
+		},
+		{
+			name: "builds event with nil service for workflows not scoped to a service",
+			cfg: &workflows.Config{
+				ChainSelector: "11155111",
+				ChainID:       "11155111",
+			},
+			evmEvent: &models.EVMEvent{
+				Address:        "0x1234567890123456789012345678901234567890",
+				BlockNumber:    12345,
+				BlockTimestamp: 1700000000,
+				ChainId:        "11155111",
+				EventSignature: "GenericEvent()",
+				LogIndex:       5,
+				TopicHash:      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+				TxHash:         "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+			},
+			service:   nil,
+			eventName: "GenericEvent",
+			data:      nil,
+			wantErr:   false,
+			validate: func(t *testing.T, ve *models.VerifiableEvent) {
+				require.NotNil(t, ve.ChainFamily)
+				require.NotNil(t, ve.ChainSelector)
+				assert.Equal(t, "evm", *ve.ChainFamily)
+				assert.Equal(t, "11155111", *ve.ChainSelector)
+				assert.Nil(t, ve.Service)
+				assert.Equal(t, "GenericEvent", ve.Name)
+				assert.Nil(t, ve.Data)
+				assert.Equal(t, time.Unix(1700000000, 0).UTC(), ve.Timestamp)
 			},
 		},
 	}
