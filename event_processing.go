@@ -23,16 +23,11 @@ import (
 
 // GetEventNameFromLog identifies the event name matching the log's topic hash
 // by checking against the list of configured ContractEventNames and the ABI.
-func GetEventNameFromLog(cfg *Config, payload *evm.Log) (string, error) {
+func GetEventNameFromLog(cfg *Config, payload *evm.Log, abiJSON string) (string, error) {
 	if len(payload.Topics) == 0 {
 		return "", fmt.Errorf("log has no topics")
 	}
 	topic0 := payload.Topics[0]
-
-	abiJSON, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
-	if err != nil {
-		return "", err
-	}
 
 	parsedABI, err := gethAbi.JSON(strings.NewReader(abiJSON))
 	if err != nil {
@@ -58,7 +53,7 @@ func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*model
 		return nil, err
 	}
 
-	eventName, err := GetEventNameFromLog(cfg, payload)
+	eventName, err := GetEventNameFromLog(cfg, payload, abi)
 	if err != nil {
 		return nil, err
 	}
@@ -401,4 +396,3 @@ func DecodeEventParams(abiJSON, eventName string, log *evm.Log) (map[string]any,
 
 	return params, nil
 }
-
