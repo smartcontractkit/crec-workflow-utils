@@ -115,16 +115,16 @@ func TestConfig_GetContractABI(t *testing.T) {
 
 func TestConfig_GetEventSignature(t *testing.T) {
 	testCases := []struct {
-		name     string
-		cfg      *workflows.Config
-		expected string
+		name      string
+		cfg       *workflows.Config
+		eventName string
+		expected  string
 	}{
 		{
 			name: "returns event signature when found",
 			cfg: &workflows.Config{
 				DetectEventTriggerConfig: workflows.DetectEventTriggerConfig{
-					ContractName:      "TestContract",
-					ContractEventName: "Transfer",
+					ContractName: "TestContract",
 					ContractReaderConfig: workflows.ContractReaderConfig{
 						Contracts: map[string]workflows.ContractDef{
 							"TestContract": {ContractABI: testTransferABI},
@@ -132,27 +132,27 @@ func TestConfig_GetEventSignature(t *testing.T) {
 					},
 				},
 			},
-			expected: "Transfer(address,address,uint256)",
+			eventName: "Transfer",
+			expected:  "Transfer(address,address,uint256)",
 		},
 		{
 			name: "returns empty when contract not found",
 			cfg: &workflows.Config{
 				DetectEventTriggerConfig: workflows.DetectEventTriggerConfig{
-					ContractName:      "NonExistent",
-					ContractEventName: "Transfer",
+					ContractName: "NonExistent",
 					ContractReaderConfig: workflows.ContractReaderConfig{
 						Contracts: map[string]workflows.ContractDef{},
 					},
 				},
 			},
-			expected: "",
+			eventName: "Transfer",
+			expected:  "",
 		},
 		{
 			name: "returns empty when event not found",
 			cfg: &workflows.Config{
 				DetectEventTriggerConfig: workflows.DetectEventTriggerConfig{
-					ContractName:      "TestContract",
-					ContractEventName: "NonExistentEvent",
+					ContractName: "TestContract",
 					ContractReaderConfig: workflows.ContractReaderConfig{
 						Contracts: map[string]workflows.ContractDef{
 							"TestContract": {ContractABI: testTransferABI},
@@ -160,14 +160,14 @@ func TestConfig_GetEventSignature(t *testing.T) {
 					},
 				},
 			},
-			expected: "",
+			eventName: "NonExistentEvent",
+			expected:  "",
 		},
 		{
 			name: "returns empty for invalid ABI JSON",
 			cfg: &workflows.Config{
 				DetectEventTriggerConfig: workflows.DetectEventTriggerConfig{
-					ContractName:      "BadContract",
-					ContractEventName: "Transfer",
+					ContractName: "BadContract",
 					ContractReaderConfig: workflows.ContractReaderConfig{
 						Contracts: map[string]workflows.ContractDef{
 							"BadContract": {ContractABI: "not valid json"},
@@ -175,13 +175,14 @@ func TestConfig_GetEventSignature(t *testing.T) {
 					},
 				},
 			},
-			expected: "",
+			eventName: "Transfer",
+			expected:  "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := workflows.GetEventSignature(tc.cfg)
+			result := workflows.GetEventSignature(tc.cfg, tc.eventName)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
@@ -207,7 +208,7 @@ workflowName: test-workflow
 detectEventTriggerConfig:
   contractName: TestContract
   contractAddress: "0x1234"
-  contractEventName: Transfer
+  contractEventNames: ["Transfer"]
 `),
 			wantErr: false,
 			validate: func(t *testing.T, cfg *workflows.Config) {
@@ -215,6 +216,7 @@ detectEventTriggerConfig:
 				assert.Equal(t, "1", cfg.ChainID)
 				assert.Equal(t, "11155111", cfg.ChainSelector)
 				assert.Equal(t, "TestContract", cfg.DetectEventTriggerConfig.ContractName)
+				assert.Equal(t, []string{"Transfer"}, cfg.DetectEventTriggerConfig.ContractEventNames)
 			},
 		},
 		{
@@ -225,7 +227,8 @@ detectEventTriggerConfig:
 				"chainSelector": "16015286601757825753",
 				"courierURL": "https://courier.example.com",
 				"detectEventTriggerConfig": {
-					"contractName": "MyContract"
+					"contractName": "MyContract",
+					"contractEventNames": ["EventA", "EventB"]
 				}
 			}`),
 			wantErr: false,
@@ -233,6 +236,7 @@ detectEventTriggerConfig:
 				assert.Equal(t, "evm", cfg.Network)
 				assert.Equal(t, "16015286601757825753", cfg.ChainSelector)
 				assert.Equal(t, "MyContract", cfg.DetectEventTriggerConfig.ContractName)
+				assert.Equal(t, []string{"EventA", "EventB"}, cfg.DetectEventTriggerConfig.ContractEventNames)
 			},
 		},
 		{

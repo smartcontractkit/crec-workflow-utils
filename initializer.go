@@ -14,17 +14,25 @@ import (
 type LogHandler func(*Config, cre.Runtime, *evm.Log) (string, error)
 
 // InitEventListenerWorkflow wires the standard EVM Log trigger for event-listener
-// workflows and attaches the provided handler. It resolves the event signature
-// from the ABI and uses cfg.ChainSelector (required in the config).
+// workflows and attaches the provided handler. It resolves the event signatures
+// from the ABI for all events in ContractEventNames and uses cfg.ChainSelector (required in the config).
 func InitEventListenerWorkflow(cfg *Config, handler LogHandler) (cre.Workflow[*Config], error) {
 	abiJSON, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
 	if err != nil {
 		return nil, err
 	}
-	ev := MustEvent(abiJSON, cfg.DetectEventTriggerConfig.ContractEventName)
-	eventSigHash := ev.ID.Bytes()
 
-	filter := NewEVMLogFilter(cfg.DetectEventTriggerConfig.ContractAddress, eventSigHash)
+	var eventSigHashes [][]byte
+	for _, eventName := range cfg.DetectEventTriggerConfig.ContractEventNames {
+		ev := MustEvent(abiJSON, eventName)
+		eventSigHashes = append(eventSigHashes, ev.ID.Bytes())
+	}
+
+	if len(eventSigHashes) == 0 {
+		return nil, fmt.Errorf("no valid event names found to trigger on")
+	}
+
+	filter := NewEVMLogFilter(cfg.DetectEventTriggerConfig.ContractAddress, eventSigHashes)
 	// Convert chainSelector string to uint64 for EVM client
 	chainSelector, err := strconv.ParseUint(cfg.ChainSelector, 10, 64)
 	if err != nil {
@@ -38,3 +46,4 @@ func InitEventListenerWorkflow(cfg *Config, handler LogHandler) (cre.Workflow[*C
 		),
 	}, nil
 }
+

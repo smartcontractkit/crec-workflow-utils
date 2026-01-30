@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,29 @@ import (
 	"github.com/smartcontractkit/crec-api-go/models"
 )
 
+// GetEventNameFromLog identifies the event name matching the log's topic hash
+// by checking against the list of configured ContractEventNames and the ABI.
+func GetEventNameFromLog(cfg *Config, payload *evm.Log, abiJSON string) (string, error) {
+	if len(payload.Topics) == 0 {
+		return "", fmt.Errorf("log has no topics")
+	}
+	topic0 := payload.Topics[0]
+
+	parsedABI, err := gethAbi.JSON(strings.NewReader(abiJSON))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse ABI: %w", err)
+	}
+
+	for _, name := range cfg.DetectEventTriggerConfig.ContractEventNames {
+		eventDef, ok := parsedABI.Events[name]
+		if ok && bytes.Equal(eventDef.ID.Bytes(), topic0) {
+			return name, nil
+		}
+	}
+
+	return "", fmt.Errorf("event not found for topic %x", topic0)
+}
+
 // BuildEVMEventFromLog constructs an EVMEvent from the given evm.Log payload,
 // decoding parameters using the contract ABI specified in cfg.
 func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*models.EVMEvent, error) {
@@ -28,7 +52,13 @@ func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*model
 	if err != nil {
 		return nil, err
 	}
-	params, err := DecodeEventParams(abi, cfg.DetectEventTriggerConfig.ContractEventName, payload)
+
+	eventName, err := GetEventNameFromLog(cfg, payload, abi)
+	if err != nil {
+		return nil, err
+	}
+
+	params, err := DecodeEventParams(abi, eventName, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +67,7 @@ func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*model
 		BlockNumber:    PBToUint64(payload.BlockNumber),
 		BlockTimestamp: blockTimestamp,
 		ChainId:        cfg.ChainID,
-		EventSignature: GetEventSignature(cfg),
+		EventSignature: GetEventSignature(cfg, eventName),
 		LogIndex:       payload.Index,
 		Params:         &params,
 		TopicHash:      "0x" + hex.EncodeToString(payload.Topics[0]),

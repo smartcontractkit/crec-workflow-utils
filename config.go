@@ -29,8 +29,8 @@ type Config struct {
 type DetectEventTriggerConfig struct {
 	ContractName         string               `yaml:"contractName"      json:"contractName"`
 	ContractAddress      string               `yaml:"contractAddress"   json:"contractAddress"`
-	ContractEventName    string               `yaml:"contractEventName" json:"contractEventName"`
-	ContractReaderConfig ContractReaderConfig `yaml:"contractReaderConfig" json:"contractReaderConfig"`
+	ContractEventNames   []string             `yaml:"contractEventNames"          json:"contractEventNames"`
+	ContractReaderConfig ContractReaderConfig `yaml:"contractReaderConfig"        json:"contractReaderConfig"`
 }
 
 // ContractReaderConfig contains the contracts map. We only need contractABI for this workflow.
@@ -62,7 +62,7 @@ func GetContractABI(cfg *Config, contractName string) (string, error) {
 	}
 }
 
-func GetEventSignature(cfg *Config) string {
+func GetEventSignature(cfg *Config, eventName string) string {
 	abiJSON, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
 	if err != nil {
 		return ""
@@ -72,7 +72,7 @@ func GetEventSignature(cfg *Config) string {
 	if err != nil {
 		return ""
 	}
-	eventDef, ok := parsedABI.Events[cfg.DetectEventTriggerConfig.ContractEventName]
+	eventDef, ok := parsedABI.Events[eventName]
 	if !ok {
 		return ""
 	}
