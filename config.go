@@ -27,10 +27,8 @@ type Config struct {
 
 // DetectEventTriggerConfig matches the template data for the log trigger.
 type DetectEventTriggerConfig struct {
-	ContractName    string `yaml:"contractName"      json:"contractName"`
-	ContractAddress string `yaml:"contractAddress"   json:"contractAddress"`
-	// ContractEventName is kept for backward compatibility. Use ContractEventNames.
-	ContractEventName    string               `yaml:"contractEventName,omitempty" json:"contractEventName,omitempty"`
+	ContractName         string               `yaml:"contractName"      json:"contractName"`
+	ContractAddress      string               `yaml:"contractAddress"   json:"contractAddress"`
 	ContractEventNames   []string             `yaml:"contractEventNames"          json:"contractEventNames"`
 	ContractReaderConfig ContractReaderConfig `yaml:"contractReaderConfig"        json:"contractReaderConfig"`
 }
@@ -96,12 +94,6 @@ func ParseWorkflowConfig(b []byte) (*Config, error) {
 		return nil, fmt.Errorf("chain selector is required")
 	}
 
-	// Migration: If ContractEventNames is empty but ContractEventName is set, populate it.
-	if len(cfg.DetectEventTriggerConfig.ContractEventNames) == 0 && cfg.DetectEventTriggerConfig.ContractEventName != "" {
-		cfg.DetectEventTriggerConfig.ContractEventNames = []string{cfg.DetectEventTriggerConfig.ContractEventName}
-	}
-
 	// No hard validation here; downstream helpers handle defaults/fallbacks.
 	return &cfg, nil
 }
-

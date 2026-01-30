@@ -208,7 +208,7 @@ workflowName: test-workflow
 detectEventTriggerConfig:
   contractName: TestContract
   contractAddress: "0x1234"
-  contractEventName: Transfer
+  contractEventNames: ["Transfer"]
 `),
 			wantErr: false,
 			validate: func(t *testing.T, cfg *workflows.Config) {
@@ -216,7 +216,6 @@ detectEventTriggerConfig:
 				assert.Equal(t, "1", cfg.ChainID)
 				assert.Equal(t, "11155111", cfg.ChainSelector)
 				assert.Equal(t, "TestContract", cfg.DetectEventTriggerConfig.ContractName)
-				assert.Equal(t, "Transfer", cfg.DetectEventTriggerConfig.ContractEventName)
 				assert.Equal(t, []string{"Transfer"}, cfg.DetectEventTriggerConfig.ContractEventNames)
 			},
 		},
@@ -280,4 +279,3 @@ detectEventTriggerConfig:
 		})
 	}
 }
-
