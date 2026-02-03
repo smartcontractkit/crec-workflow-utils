@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	workflows "github.com/smartcontractkit/cre-workflow-utils"
+	"github.com/smartcontractkit/crec-api-go/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,93 +139,230 @@ func TestFinancialServicesTypes_Fixed2_RoundTrip(t *testing.T) {
 	assert.InDelta(t, float64(original.Amount), float64(decoded.Amount), 0.001)
 }
 
-func TestFinancialServicesTypes_ComposeWorkflowEventMetadata(t *testing.T) {
+func TestGetReferenceDataFromVerifiableEvent(t *testing.T) {
 	testCases := []struct {
-		name      string
-		component string
-		chainID   string
-		eventType string
-		params    map[string]any
-		validate  func(t *testing.T, result map[string]any)
+		name        string
+		setupEvent  func() models.VerifiableEvent
+		wantErr     bool
+		errContains string
+		validate    func(t *testing.T, result *workflows.ReferenceData)
 	}{
 		{
-			name:      "composes basic metadata",
-			component: "event-listener-dta",
-			chainID:   "11155111",
-			eventType: "RequestCreated",
-			params:    nil,
-			validate: func(t *testing.T, result map[string]any) {
-				assert.Equal(t, "11155111", result["chainId"])
-				assert.Equal(t, "evm", result["network"])
-
-				workflowEvent := result["workflowEvent"].(map[string]any)
-				assert.Equal(t, "event-listener-dta", workflowEvent["component"])
-				assert.Equal(t, "RequestCreated", workflowEvent["event_type_label"])
-
-				labels := workflowEvent["process_labels"].([]string)
-				assert.Contains(t, labels, "dta")
-				assert.Contains(t, labels, "RequestCreated")
+			name: "successfully extracts reference data with on-chain data",
+			setupEvent: func() models.VerifiableEvent {
+				referenceData := map[string]interface{}{
+					"on_chain": []interface{}{
+						map[string]interface{}{
+							"source": map[string]interface{}{
+								"contract_address":            "0x1234567890123456789012345678901234567890",
+								"contract_function_signature": "getPrice(bytes32)",
+								"call_data":                   "0xabcdef",
+								"block":                       "latest",
+							},
+							"data": map[string]interface{}{
+								"price": "100.50",
+							},
+						},
+					},
+				}
+				refDataBytes, _ := json.Marshal(referenceData)
+				typeAndValue := map[string]interface{}{
+					"type":  "reference_data",
+					"value": json.RawMessage(refDataBytes),
+				}
+				return models.VerifiableEvent{
+					Data: &typeAndValue,
+				}
+			},
+			wantErr: false,
+			validate: func(t *testing.T, result *workflows.ReferenceData) {
+				require.NotNil(t, result)
+				require.Len(t, result.OnChain, 1)
+				assert.Equal(t, "0x1234567890123456789012345678901234567890", result.OnChain[0].Source.ContractAddress)
+				assert.Equal(t, "getPrice(bytes32)", result.OnChain[0].Source.ContractFunctionSignature)
+				assert.Equal(t, "0xabcdef", result.OnChain[0].Source.CallData)
+				assert.Equal(t, "latest", result.OnChain[0].Source.Block)
+				assert.Equal(t, "100.50", result.OnChain[0].Data["price"])
 			},
 		},
 		{
-			name:      "includes custom params in attributes",
-			component: "my-workflow",
-			chainID:   "1",
-			eventType: "Transfer",
-			params: map[string]any{
-				"from":   "0x1234",
-				"to":     "0x5678",
-				"amount": 1000,
+			name: "successfully extracts reference data with off-chain data",
+			setupEvent: func() models.VerifiableEvent {
+				referenceData := map[string]interface{}{
+					"off_chain": []interface{}{
+						map[string]interface{}{
+							"source": map[string]interface{}{
+								"type":       "api",
+								"identifier": "urn:api:price-feed",
+							},
+							"data": map[string]interface{}{
+								"symbol": "ETH/USD",
+								"price":  "2500.00",
+							},
+						},
+					},
+				}
+				refDataBytes, _ := json.Marshal(referenceData)
+				typeAndValue := map[string]interface{}{
+					"type":  "reference_data",
+					"value": json.RawMessage(refDataBytes),
+				}
+				return models.VerifiableEvent{
+					Data: &typeAndValue,
+				}
 			},
-			validate: func(t *testing.T, result map[string]any) {
-				workflowEvent := result["workflowEvent"].(map[string]any)
-				attrs := workflowEvent["attributes"].(map[string]map[string]any)
-
-				assert.Contains(t, attrs, "from")
-				assert.Equal(t, "0x1234", attrs["from"]["value"])
-				assert.Equal(t, true, attrs["from"]["on_chain"])
-
-				assert.Contains(t, attrs, "to")
-				assert.Equal(t, "0x5678", attrs["to"]["value"])
-
-				assert.Contains(t, attrs, "amount")
-				assert.Equal(t, "1000", attrs["amount"]["value"])
-
-				assert.Contains(t, attrs, "chain_id")
-				assert.Contains(t, attrs, "event_type")
-			},
-		},
-		{
-			name:      "handles single-segment component",
-			component: "simple",
-			chainID:   "42161",
-			eventType: "Approval",
-			params:    nil,
-			validate: func(t *testing.T, result map[string]any) {
-				workflowEvent := result["workflowEvent"].(map[string]any)
-				labels := workflowEvent["process_labels"].([]string)
-				assert.Contains(t, labels, "simple")
+			wantErr: false,
+			validate: func(t *testing.T, result *workflows.ReferenceData) {
+				require.NotNil(t, result)
+				require.Len(t, result.OffChain, 1)
+				assert.Equal(t, "api", result.OffChain[0].Source.Type)
+				assert.Equal(t, "urn:api:price-feed", result.OffChain[0].Source.Identifier)
+				assert.Equal(t, "ETH/USD", result.OffChain[0].Data["symbol"])
+				assert.Equal(t, "2500.00", result.OffChain[0].Data["price"])
 			},
 		},
 		{
-			name:      "extracts last segment from multi-hyphen component",
-			component: "prefix-middle-suffix",
-			chainID:   "1",
-			eventType: "Event",
-			params:    nil,
-			validate: func(t *testing.T, result map[string]any) {
-				workflowEvent := result["workflowEvent"].(map[string]any)
-				labels := workflowEvent["process_labels"].([]string)
-				assert.Contains(t, labels, "suffix")
+			name: "successfully extracts reference data with requests",
+			setupEvent: func() models.VerifiableEvent {
+				referenceData := map[string]interface{}{
+					"requests": []interface{}{
+						map[string]interface{}{
+							"type":  "payment_request",
+							"value": map[string]interface{}{"amount": "100.00"},
+						},
+					},
+				}
+				refDataBytes, _ := json.Marshal(referenceData)
+				typeAndValue := map[string]interface{}{
+					"type":  "reference_data",
+					"value": json.RawMessage(refDataBytes),
+				}
+				return models.VerifiableEvent{
+					Data: &typeAndValue,
+				}
 			},
+			wantErr: false,
+			validate: func(t *testing.T, result *workflows.ReferenceData) {
+				require.NotNil(t, result)
+				require.Len(t, result.Requests, 1)
+				assert.Equal(t, workflows.RawMessageTypePaymentRequest, result.Requests[0].Type)
+			},
+		},
+		{
+			name: "successfully extracts empty reference data",
+			setupEvent: func() models.VerifiableEvent {
+				referenceData := map[string]interface{}{}
+				refDataBytes, _ := json.Marshal(referenceData)
+				typeAndValue := map[string]interface{}{
+					"type":  "reference_data",
+					"value": json.RawMessage(refDataBytes),
+				}
+				return models.VerifiableEvent{
+					Data: &typeAndValue,
+				}
+			},
+			wantErr: false,
+			validate: func(t *testing.T, result *workflows.ReferenceData) {
+				require.NotNil(t, result)
+				assert.Empty(t, result.OnChain)
+				assert.Empty(t, result.OffChain)
+				assert.Empty(t, result.Requests)
+			},
+		},
+		{
+			name: "returns nil when data is nil",
+			setupEvent: func() models.VerifiableEvent {
+				return models.VerifiableEvent{
+					Data: nil,
+				}
+			},
+			wantErr: false,
+			validate: func(t *testing.T, result *workflows.ReferenceData) {
+				assert.Nil(t, result)
+			},
+		},
+		{
+			name: "fails when data is not a valid type and value structure",
+			setupEvent: func() models.VerifiableEvent {
+				invalidData := map[string]interface{}{
+					"invalid": "structure",
+				}
+				return models.VerifiableEvent{
+					Data: &invalidData,
+				}
+			},
+			wantErr:     true,
+			errContains: "expected reference_data",
+		},
+		{
+			name: "fails when type is not reference_data",
+			setupEvent: func() models.VerifiableEvent {
+				typeAndValue := map[string]interface{}{
+					"type":  "payment_request",
+					"value": map[string]interface{}{"amount": "100.00"},
+				}
+				return models.VerifiableEvent{
+					Data: &typeAndValue,
+				}
+			},
+			wantErr:     true,
+			errContains: "verifiable event data type is payment_request, expected reference_data",
+		},
+		{
+			name: "fails when value is not valid reference data",
+			setupEvent: func() models.VerifiableEvent {
+				invalidValue := map[string]interface{}{
+					"invalid_field": "invalid_value",
+				}
+				valueBytes, _ := json.Marshal(invalidValue)
+				typeAndValue := map[string]interface{}{
+					"type":  "reference_data",
+					"value": json.RawMessage(valueBytes),
+				}
+				// This should still unmarshal but we'll test with invalid structure
+				return models.VerifiableEvent{
+					Data: &typeAndValue,
+				}
+			},
+			wantErr: false, // Invalid fields in reference data should be ignored, not cause errors
+			validate: func(t *testing.T, result *workflows.ReferenceData) {
+				require.NotNil(t, result)
+			},
+		},
+		{
+			name: "fails when value is not valid JSON",
+			setupEvent: func() models.VerifiableEvent {
+				typeAndValue := map[string]interface{}{
+					"type":  "reference_data",
+					"value": json.RawMessage(`{invalid json}`),
+				}
+				return models.VerifiableEvent{
+					Data: &typeAndValue,
+				}
+			},
+			wantErr:     true,
+			errContains: "failed to marshal verifiable event data",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := workflows.ComposeWorkflowEventMetadata(tc.component, tc.chainID, tc.eventType, tc.params)
-			require.NotNil(t, result)
-			tc.validate(t, result)
+			ve := tc.setupEvent()
+			result, err := workflows.GetReferenceDataFromVerifiableEvent(ve)
+
+			if tc.wantErr {
+				require.Error(t, err)
+				if tc.errContains != "" {
+					assert.Contains(t, err.Error(), tc.errContains)
+				}
+				assert.Nil(t, result)
+				return
+			}
+
+			require.NoError(t, err)
+			if tc.validate != nil {
+				tc.validate(t, result)
+			}
 		})
 	}
 }

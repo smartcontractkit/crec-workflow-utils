@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
+
+	"github.com/smartcontractkit/crec-api-go/models"
 )
 
 type RawMessageType string
@@ -110,47 +111,27 @@ type PaymentCallback struct {
 	FunctionSignature string `json:"functionSignature,omitempty"` // The ABI function signature to call (e.g., "fulfillPayment(bytes32,uint256)")
 }
 
-// ComposeWorkflowEventMetadata builds a "workflowEvent" metadata payload similar to the
-// original event-listener-dta workflow, carrying human-friendly attributes.
-func ComposeWorkflowEventMetadata(component, chainID, eventType string, params map[string]any) map[string]any {
-	// Build attributes map[string]map[string]any
-	attrs := map[string]map[string]any{
-		"chain_id": {
-			"key":        "chain_id",
-			"value":      chainID,
-			"on_chain":   true,
-			"visibility": "info",
-		},
-		"event_type": {
-			"key":        "event_type",
-			"value":      eventType,
-			"on_chain":   true,
-			"visibility": "info",
-		},
+// GetReferenceDataFromVerifiableEvent extracts the ReferenceData from the verifiable event data field if it exists.
+func GetReferenceDataFromVerifiableEvent(verifiableEvent models.VerifiableEvent) (*ReferenceData, error) {
+	if verifiableEvent.Data == nil {
+		return nil, nil
 	}
-	for k, v := range params {
-		attrs[k] = map[string]any{
-			"key":        k,
-			"value":      fmt.Sprint(v),
-			"on_chain":   true,
-			"visibility": "info",
-		}
+	dataBytes, err := json.Marshal(verifiableEvent.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal verifiable event data: %w", err)
 	}
-
-	// process label: keep last segment of component (e.g. event-listener-dta -> dta)
-	label := component
-	if parts := strings.Split(component, "-"); len(parts) > 0 {
-		label = parts[len(parts)-1]
+	var typeAndValue TypeAndValue
+	err = json.Unmarshal(dataBytes, &typeAndValue)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal type and value from verifiable event data: %w", err)
 	}
-
-	return map[string]any{
-		"chainId": chainID, // keep exactly as before; network is provided separately
-		"network": "evm",
-		"workflowEvent": map[string]any{
-			"attributes":       attrs,
-			"component":        component,
-			"event_type_label": eventType,
-			"process_labels":   []string{strings.ToLower(label), eventType},
-		},
+	if typeAndValue.Type != RawMessageTypeReferenceData {
+		return nil, fmt.Errorf("verifiable event data type is %s, expected %s", typeAndValue.Type, RawMessageTypeReferenceData)
 	}
+	var referenceData ReferenceData
+	err = json.Unmarshal(typeAndValue.Value, &referenceData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal reference data from verifiable event data: %w", err)
+	}
+	return &referenceData, nil
 }
