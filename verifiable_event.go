@@ -37,10 +37,6 @@ func DecodeVerifiableEvent(encoded string) (*models.VerifiableEvent, error) {
 	return &ve, nil
 }
 
-func ComputeEventHash(encodedVerifiableEvent string) (common.Hash, error) {
-	decodedBytes, err := base64.StdEncoding.DecodeString(encodedVerifiableEvent)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return crypto.Keccak256Hash(decodedBytes), nil
+func ComputeEventHash(encoded string) (common.Hash, error) {
+	return crypto.Keccak256Hash([]byte(encoded)), nil
 }
