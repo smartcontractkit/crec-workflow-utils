@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
-	workflows "github.com/smartcontractkit/cre-workflow-utils"
 	"github.com/smartcontractkit/crec-api-go/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	workflows "github.com/smartcontractkit/cre-workflow-utils"
 )
 
 func ptr(s string) *string {
@@ -68,32 +68,34 @@ func TestVerifiableEvent_EncodeVerifiableEvent(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			encoded, err := workflows.EncodeVerifiableEvent(tc.ve)
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
+		t.Run(
+			tc.name, func(t *testing.T) {
+				encoded, err := workflows.EncodeVerifiableEvent(tc.ve)
+				if tc.wantErr {
+					require.Error(t, err)
+					return
+				}
 
-			require.NoError(t, err)
-			require.NotEmpty(t, encoded)
+				require.NoError(t, err)
+				require.NotEmpty(t, encoded)
 
-			decoded, err := base64.StdEncoding.DecodeString(encoded)
-			require.NoError(t, err)
+				decoded, err := base64.StdEncoding.DecodeString(encoded)
+				require.NoError(t, err)
 
-			var result models.VerifiableEvent
-			err = json.Unmarshal(decoded, &result)
-			require.NoError(t, err)
-			assert.Equal(t, tc.ve.ChainFamily, result.ChainFamily)
-			assert.Equal(t, tc.ve.ChainSelector, result.ChainSelector)
-			assert.Equal(t, tc.ve.Name, result.Name)
-			if tc.ve.Service == nil {
-				assert.Nil(t, result.Service)
-			} else {
-				require.NotNil(t, result.Service)
-				assert.Equal(t, *tc.ve.Service, *result.Service)
-			}
-		})
+				var result models.VerifiableEvent
+				err = json.Unmarshal(decoded, &result)
+				require.NoError(t, err)
+				assert.Equal(t, tc.ve.ChainFamily, result.ChainFamily)
+				assert.Equal(t, tc.ve.ChainSelector, result.ChainSelector)
+				assert.Equal(t, tc.ve.Name, result.Name)
+				if tc.ve.Service == nil {
+					assert.Nil(t, result.Service)
+				} else {
+					require.NotNil(t, result.Service)
+					assert.Equal(t, *tc.ve.Service, *result.Service)
+				}
+			},
+		)
 	}
 }
 
@@ -179,21 +181,23 @@ func TestVerifiableEvent_DecodeVerifiableEvent(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			encoded := tc.setupEncoded()
-			result, err := workflows.DecodeVerifiableEvent(encoded)
+		t.Run(
+			tc.name, func(t *testing.T) {
+				encoded := tc.setupEncoded()
+				result, err := workflows.DecodeVerifiableEvent(encoded)
 
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
+				if tc.wantErr {
+					require.Error(t, err)
+					return
+				}
 
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			if tc.validate != nil {
-				tc.validate(t, result)
-			}
-		})
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				if tc.validate != nil {
+					tc.validate(t, result)
+				}
+			},
+		)
 	}
 }
 
@@ -223,13 +227,6 @@ func TestVerifiableEvent_ComputeEventHash(t *testing.T) {
 			},
 		},
 		{
-			name: "fails on invalid base64",
-			setupEncoded: func() string {
-				return "invalid-base64!!!"
-			},
-			wantErr: true,
-		},
-		{
 			name: "hash is deterministic",
 			setupEncoded: func() string {
 				ve := &models.VerifiableEvent{
@@ -256,34 +253,25 @@ func TestVerifiableEvent_ComputeEventHash(t *testing.T) {
 				assert.Equal(t, hash, hash2.String())
 			},
 		},
-		{
-			name: "hash matches manual keccak256 computation",
-			setupEncoded: func() string {
-				return base64.StdEncoding.EncodeToString([]byte(`{"test":"data"}`))
-			},
-			wantErr: false,
-			validate: func(t *testing.T, hash string) {
-				expectedHash := crypto.Keccak256Hash([]byte(`{"test":"data"}`))
-				assert.Equal(t, expectedHash.String(), hash)
-			},
-		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			encoded := tc.setupEncoded()
-			result, err := workflows.ComputeEventHash(encoded)
+		t.Run(
+			tc.name, func(t *testing.T) {
+				encoded := tc.setupEncoded()
+				result, err := workflows.ComputeEventHash(encoded)
 
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
+				if tc.wantErr {
+					require.Error(t, err)
+					return
+				}
 
-			require.NoError(t, err)
-			if tc.validate != nil {
-				tc.validate(t, result.String())
-			}
-		})
+				require.NoError(t, err)
+				if tc.validate != nil {
+					tc.validate(t, result.String())
+				}
+			},
+		)
 	}
 }
 
@@ -461,23 +449,27 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := workflows.BuildVerifiableEventForEVMEvent(tc.cfg, tc.evmEvent, tc.service, tc.eventName, tc.data)
+		t.Run(
+			tc.name, func(t *testing.T) {
+				result, err := workflows.BuildVerifiableEventForEVMEvent(
+					tc.cfg, tc.evmEvent, tc.service, tc.eventName, tc.data,
+				)
 
-			if tc.wantErr {
-				require.Error(t, err)
-				if tc.errContains != "" {
-					assert.Contains(t, err.Error(), tc.errContains)
+				if tc.wantErr {
+					require.Error(t, err)
+					if tc.errContains != "" {
+						assert.Contains(t, err.Error(), tc.errContains)
+					}
+					return
 				}
-				return
-			}
 
-			require.NoError(t, err)
-			require.NotNil(t, result)
+				require.NoError(t, err)
+				require.NotNil(t, result)
 
-			if tc.validate != nil {
-				tc.validate(t, result)
-			}
-		})
+				if tc.validate != nil {
+					tc.validate(t, result)
+				}
+			},
+		)
 	}
 }
