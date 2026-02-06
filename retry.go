@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const (
+var (
 	initialRetryDelay = 5 * time.Second
 	attempts          = 3
 )
