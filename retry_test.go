@@ -12,13 +12,13 @@ import (
 func TestRetry(t *testing.T) {
 	// Override configuration for testing to ensure tests run fast.
 	// We save the original values and defer their restoration.
-	originalDelay := initialRetryDelay
-	originalAttempts := attempts
-	initialRetryDelay = 1 * time.Millisecond
-	attempts = 3
+	originalDelay := InitialRetryDelay
+	originalAttempts := Attempts
+	InitialRetryDelay = 1 * time.Millisecond
+	Attempts = 2
 	defer func() {
-		initialRetryDelay = originalDelay
-		attempts = originalAttempts
+		InitialRetryDelay = originalDelay
+		Attempts = originalAttempts
 	}()
 
 	logger := slog.Default()
@@ -46,18 +46,18 @@ func TestRetry(t *testing.T) {
 
 		val, err := Retry(logger, "test-unavailable", fn)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "test-unavailable failed after 3 attempts")
+		assert.Contains(t, err.Error(), "test-unavailable failed after 2 Attempts")
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Equal(t, "", val)
-		assert.Equal(t, 3, callCount)
+		assert.Equal(t, 2, callCount)
 	})
 
 	t.Run("AvailabilityAfterSomeTime", func(t *testing.T) {
 		callCount := 0
-		// Fails 2 times, succeeds on the 3rd
+		// Fails 1 time, succeeds on the 2nd
 		fn := func() (string, error) {
 			callCount++
-			if callCount < 3 {
+			if callCount < 2 {
 				return "", errors.New("temporary error")
 			}
 			return "recovered", nil
@@ -66,6 +66,21 @@ func TestRetry(t *testing.T) {
 		val, err := Retry(logger, "test-recover", fn)
 		assert.NoError(t, err)
 		assert.Equal(t, "recovered", val)
-		assert.Equal(t, 3, callCount)
+		assert.Equal(t, 2, callCount)
+	})
+
+	t.Run("StopRetry", func(t *testing.T) {
+		callCount := 0
+		expectedErr := errors.New("fatal error")
+		fn := func() (string, error) {
+			callCount++
+			return "", StopRetry(expectedErr)
+		}
+
+		val, err := Retry(logger, "test-stop-retry", fn)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, expectedErr)
+		assert.Equal(t, "", val)
+		assert.Equal(t, 1, callCount) // Should stop after first attempt
 	})
 }

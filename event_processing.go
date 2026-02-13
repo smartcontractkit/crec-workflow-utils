@@ -145,35 +145,43 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 	// We aggregate only the integer StatusCode to ensure compatibility with Identical consensus.
 	client := &httpcap.Client{}
 
-	_, err = httpcap.SendRequest(
-		cfg,
-		rt,
-		client,
-		func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (int, error) {
-			headers := map[string]string{
-				"Content-Type": "application/json",
-			}
-			req := &httpcap.Request{
-				Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
-				Method:  "POST",
-				Headers: headers,
-				Body:    body,
-			}
-			resp, err := sr.SendRequest(req).Await()
-			if err != nil {
-				return 0, err
-			}
-			if resp == nil {
-				return 0, fmt.Errorf("nil response")
-			}
-			// Treat any 4xx/5xx as an error (caller may retry).
-			if resp.StatusCode >= 400 {
-				return 0, fmt.Errorf("courier API responded with status %d", resp.StatusCode)
-			}
-			return int(resp.StatusCode), nil
-		},
-		cre.ConsensusIdenticalAggregation[int](),
-	).Await()
+	// Retry only the network request, not the entire event processing/signing.
+	_, err = Retry(slog.Default(), "post_verifiable_event", func() (int, error) {
+		return httpcap.SendRequest(
+			cfg,
+			rt,
+			client,
+			func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (int, error) {
+				headers := map[string]string{
+					"Content-Type": "application/json",
+				}
+				req := &httpcap.Request{
+					Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
+					Method:  "POST",
+					Headers: headers,
+					Body:    body,
+				}
+				resp, err := sr.SendRequest(req).Await()
+				if err != nil {
+					return 0, err
+				}
+				if resp == nil {
+					return 0, fmt.Errorf("nil response")
+				}
+				// Treat 4xx as deterministic errors (except 408/429) and stop retry.
+				// Treat 5xx as retriable errors.
+				if resp.StatusCode >= 400 {
+					err := fmt.Errorf("courier API responded with status %d", resp.StatusCode)
+					if resp.StatusCode < 500 && resp.StatusCode != 408 && resp.StatusCode != 429 {
+						return 0, StopRetry(err)
+					}
+					return 0, err
+				}
+				return int(resp.StatusCode), nil
+			},
+			cre.ConsensusIdenticalAggregation[int](),
+		).Await()
+	})
 	if err != nil {
 		return "", err
 	}
@@ -210,7 +218,7 @@ func toHexIfB64(s string) (string, bool) {
 	}
 }
 
-// tryByteArrayHex attempts to detect if arr is a []interface{} representing a byte-array
+// tryByteArrayHex Attempts to detect if arr is a []interface{} representing a byte-array
 // (sequence of numeric 0..255 values). If so, it returns a 0x-hex string. Otherwise ok=false.
 func tryByteArrayHex(arr []any) (string, bool) {
 	n := len(arr)
