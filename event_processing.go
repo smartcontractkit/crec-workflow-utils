@@ -100,7 +100,7 @@ func BuildVerifiableEventForEVMEvent(
 }
 
 // SignAndPostVerifiableEvent performs identical-consensus report generation and posts the signed event
-// to the Courier /system/onchain-watcher-events endpoint. It returns the base64 verifiable event.
+// to the Courier /onchain-watcher-events endpoint. It returns the base64 verifiable event.
 func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.VerifiableEvent) (string, error) {
 	encodedVerifiableEvent, err := EncodeVerifiableEvent(ve)
 	if err != nil {
@@ -156,7 +156,7 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 					"Content-Type": "application/json",
 				}
 				req := &httpcap.Request{
-					Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
+					Url:     strings.TrimRight(cfg.CourierURL, "/") + "/onchain-watcher-events",
 					Method:  "POST",
 					Headers: headers,
 					Body:    body,
