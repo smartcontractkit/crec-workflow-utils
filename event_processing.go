@@ -156,7 +156,7 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 					"Content-Type": "application/json",
 				}
 				req := &httpcap.Request{
-					Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/onchain-watcher-events",
+					Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/v1/onchain-watcher-events",
 					Method:  "POST",
 					Headers: headers,
 					Body:    body,
