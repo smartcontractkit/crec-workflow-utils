@@ -147,6 +147,7 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 
 	// Retry only the network request, not the entire event processing/signing.
 	_, err = Retry(slog.Default(), "post_verifiable_event", func() (int, error) {
+		url := strings.TrimRight(cfg.CourierURL, "/") + "/system/v1/onchain-watcher-events"
 		return httpcap.SendRequest(
 			cfg,
 			rt,
@@ -156,7 +157,7 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 					"Content-Type": "application/json",
 				}
 				req := &httpcap.Request{
-					Url:     strings.TrimRight(cfg.CourierURL, "/") + "/system/v1/onchain-watcher-events",
+					Url:     url,
 					Method:  "POST",
 					Headers: headers,
 					Body:    body,
@@ -171,7 +172,7 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 				// Treat 4xx as deterministic errors (except 408/429) and stop retry.
 				// Treat 5xx as retriable errors.
 				if resp.StatusCode >= 400 {
-					err := fmt.Errorf("courier API responded with status %d", resp.StatusCode)
+					err := fmt.Errorf("courier API responded with status %d when trying to hit url %s", resp.StatusCode, url)
 					if resp.StatusCode < 500 && resp.StatusCode != 408 && resp.StatusCode != 429 {
 						return 0, StopRetry(err)
 					}
