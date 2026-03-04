@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	workflows "github.com/smartcontractkit/cre-workflow-utils"
+	workflows "github.com/smartcontractkit/crec-workflow-utils"
 	"github.com/smartcontractkit/crec-api-go/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

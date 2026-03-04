@@ -5,7 +5,7 @@ import (
 
 	"github.com/smartcontractkit/chainlink-protos/cre/go/values/pb"
 	"github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm"
-	workflows "github.com/smartcontractkit/cre-workflow-utils"
+	workflows "github.com/smartcontractkit/crec-workflow-utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

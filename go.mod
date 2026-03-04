@@ -1,4 +1,4 @@
-module github.com/smartcontractkit/cre-workflow-utils
+module github.com/smartcontractkit/crec-workflow-utils
 
 go 1.25.3
 

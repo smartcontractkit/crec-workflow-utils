@@ -1,4 +1,4 @@
-# CRE Workflow Utils
+# CREC Workflow Utils
 
 Common utilities for building CRE (Chainlink Runtime Environment) event watcher workflows.
 
@@ -14,7 +14,7 @@ This package provides shared functionality for CRE workflow extensions that impl
 ## Installation
 
 ```bash
-go get github.com/smartcontractkit/cre-workflow-utils
+go get github.com/smartcontractkit/crec-workflow-utils
 ```
 
 ## Usage
@@ -27,7 +27,7 @@ package handler
 import (
     "github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm"
     "github.com/smartcontractkit/cre-sdk-go/cre"
-    workflows "github.com/smartcontractkit/cre-workflow-utils"
+    workflows "github.com/smartcontractkit/crec-workflow-utils"
 )
 
 func OnLog(cfg *workflows.Config, rt cre.Runtime, payload *evm.Log) (string, error) {

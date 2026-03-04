@@ -8,7 +8,7 @@
 //
 // Usage:
 //
-//	import workflows "github.com/smartcontractkit/cre-workflow-utils"
+//	import workflows "github.com/smartcontractkit/crec-workflow-utils"
 //
 //	func OnLog(cfg *workflows.Config, rt cre.Runtime, payload *evm.Log) (string, error) {
 //	    // Decode and process event...

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	workflows "github.com/smartcontractkit/cre-workflow-utils"
+	workflows "github.com/smartcontractkit/crec-workflow-utils"
 )
 
 func ptr(s string) *string {
