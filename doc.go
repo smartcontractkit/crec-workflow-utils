@@ -1,16 +1,39 @@
-// Package workflows provides common utilities for CRE event watcher workflow development.
+// Package workflows provides common utilities for CRE (Chainlink Runtime Environment)
+// event watcher workflow development. It is used by crec-sdk-ext-dta, crec-sdk-ext-dvp,
+// and other CRE workflow extensions that listen for EVM contract events and post
+// verifiable events to CREC.
 //
-// Key features:
-//   - Configuration parsing (YAML/JSON workflow configs)
-//   - Event processing (decode EVM logs, build consensus reports)
-//   - Workflow initialization (wire up EVM log triggers with handlers)
-//   - Testing utilities (mock runtime for unit testing)
+// # Key Features
 //
-// Usage:
+//   - Configuration parsing — [ParseWorkflowConfig] for YAML/JSON workflow configs
+//   - Event processing — [BuildEVMEventFromLog], [BuildVerifiableEventForEVMEvent], [SignAndPostVerifiableEvent]
+//   - Workflow initialization — [InitEventListenerWorkflow] wires EVM log triggers with [LogHandler]
+//   - Testing utilities — [PrepareTestingRuntime] for unit tests
 //
-//	import workflows "github.com/smartcontractkit/crec-workflow-utils"
+// # Usage
+//
+// Create a workflow entry point:
+//
+//	r := wasm.NewRunner(workflows.ParseWorkflowConfig)
+//	r.Run(func(cfg *workflows.Config, _ *slog.Logger, _ cre.SecretsProvider) (cre.Workflow[*workflows.Config], error) {
+//	    return workflows.InitEventListenerWorkflow(cfg, OnLog)
+//	})
+//
+// Implement a [LogHandler] that decodes the EVM log, builds a verifiable event, and posts it:
 //
 //	func OnLog(cfg *workflows.Config, rt cre.Runtime, payload *evm.Log) (string, error) {
-//	    // Decode and process event...
+//	    evmEvent, err := workflows.BuildEVMEventFromLog(rt, cfg, payload)
+//	    if err != nil { return "", err }
+//	    eventName, err := workflows.GetEventNameFromLog(cfg, payload, abiJSON)
+//	    if err != nil { return "", err }
+//	    ve, err := workflows.BuildVerifiableEventForEVMEvent(cfg, evmEvent, cfg.Service, eventName, nil)
+//	    if err != nil { return "", err }
+//	    return workflows.SignAndPostVerifiableEvent(cfg, rt, ve)
 //	}
+//
+// # Error Handling
+//
+// Errors from [ParseWorkflowConfig] indicate invalid YAML/JSON or missing required fields (e.g. chainSelector).
+// [GetContractABI] returns an error if the contract is not found in config.
+// [SignAndPostVerifiableEvent] returns errors from consensus generation or CREC API failures.
 package workflows
