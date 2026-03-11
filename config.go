@@ -62,6 +62,9 @@ func GetContractABI(cfg *Config, contractName string) (string, error) {
 	}
 }
 
+// GetEventSignature returns the ABI event signature (topic hash) for the given event name
+// from the workflow config. It returns an empty string if the contract ABI cannot be loaded,
+// parsed, or if the event is not found.
 func GetEventSignature(cfg *Config, eventName string) string {
 	abiJSON, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
 	if err != nil {

@@ -8,15 +8,19 @@ import (
 	"github.com/smartcontractkit/crec-api-go/models"
 )
 
+// RawMessageType identifies the kind of payload in a TypeAndValue structure.
 type RawMessageType string
 
 const (
+	// RawMessageTypeMap indicates the value is a generic map structure.
 	RawMessageTypeMap RawMessageType = "map"
 )
 
 const (
+	// RawMessageTypePaymentRequest indicates the value is a payment request payload.
 	RawMessageTypePaymentRequest RawMessageType = "payment_request"
-	RawMessageTypeReferenceData  RawMessageType = "reference_data"
+	// RawMessageTypeReferenceData indicates the value is reference data from on-chain or off-chain sources.
+	RawMessageTypeReferenceData RawMessageType = "reference_data"
 )
 
 // TypeAndValue is a type that holds a type and a value.

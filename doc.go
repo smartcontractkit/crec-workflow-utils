@@ -1,6 +1,6 @@
 // Package workflows provides common utilities for CRE (Chainlink Runtime Environment)
 // event watcher workflow development. It is used by CREC workflow extensions that
-// listen for EVM contract events and postverifiable events to CREC.
+// listen for EVM contract events and post verifiable events to CREC.
 //
 // # Key Features
 //

@@ -1,5 +1,6 @@
 package workflows
 
+// CurrencyCodes maps ISO 4217 numeric currency IDs to their three-letter codes.
 var CurrencyCodes = map[uint8]string{
 	0:   "None",
 	1:   "AED",
@@ -182,6 +183,8 @@ var CurrencyCodes = map[uint8]string{
 	178: "ZWG",
 }
 
+// GetCurrencyCodeAsOffChainReferenceData returns an OffChainReferenceData struct containing
+// the currency code for the given numeric ID, or "Unknown" if the ID is not in CurrencyCodes.
 func GetCurrencyCodeAsOffChainReferenceData(currencyId uint8) OffChainReferenceData {
 	result := OffChainReferenceData{
 		Source: OffChainReferenceDataSource{
@@ -201,6 +204,8 @@ func GetCurrencyCodeAsOffChainReferenceData(currencyId uint8) OffChainReferenceD
 	return result
 }
 
+// GetCurrencyCode returns the three-letter ISO 4217 code for the given numeric currency ID,
+// or "Unknown" if the ID is not found in CurrencyCodes.
 func GetCurrencyCode(currencyId uint8) string {
 	currencyCode, ok := CurrencyCodes[currencyId]
 	if !ok {
