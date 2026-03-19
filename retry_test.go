@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +35,7 @@ func TestRetry(t *testing.T) {
 
 		val, err := Retry(logger, "test-unavailable", fastRetry, fn)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "test-unavailable failed after 2 Attempts")
+		assert.Contains(t, err.Error(), "test-unavailable failed after 2 attempts")
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Equal(t, "", val)
 		assert.Equal(t, 2, callCount)
@@ -74,25 +73,15 @@ func TestRetry(t *testing.T) {
 	})
 }
 
-func TestConfidenceLevelFromString(t *testing.T) {
-	tests := []struct {
-		name     string
-		in       string
-		expected evm.ConfidenceLevel
-	}{
-		{"empty", "", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
-		{"whitespace_only", "  ", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
-		{"unknown", "unknown", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
-		{"latest_lower", "latest", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
-		{"latest_mixed", "LATEST", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
-		{"safe_lower", "safe", evm.ConfidenceLevel_CONFIDENCE_LEVEL_SAFE},
-		{"safe_mixed", "SAFE", evm.ConfidenceLevel_CONFIDENCE_LEVEL_SAFE},
-		{"finalized_lower", "finalized", evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED},
-		{"finalized_mixed", "FINALIZED", evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED},
+func TestRetry_negativeMaxAttemptsUsesDefault(t *testing.T) {
+	logger := slog.Default()
+	callCount := 0
+	fn := func() (string, error) {
+		callCount++
+		return "", errors.New("fail")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, ConfidenceLevelFromString(tt.in))
-		})
-	}
+	_, err := Retry(logger, "test-negative-attempts", &RetryConfig{MaxAttempts: -1, InitialDelay: "1ms"}, fn)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "test-negative-attempts failed after 3 attempts")
+	assert.Equal(t, 3, callCount)
 }

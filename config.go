@@ -21,8 +21,8 @@ type Config struct {
 	ChainSelector string  `yaml:"chainSelector"          json:"chainSelector"`
 	WatcherID     string  `yaml:"watcherID"              json:"watcherID"`
 	WorkflowName  string  `yaml:"workflowName"           json:"workflowName"`
-	// ConfidenceLevel is the confidence level to use for the event detection. It accepts "finalized", "safe", and "latest".
-	// Defaults to "latest".
+	// ConfidenceLevel is the EVM log trigger confidence: "finalized", "safe", or "latest".
+	// Defaults to "latest" when omitted after [ParseWorkflowConfig].
 	ConfidenceLevel string `yaml:"confidenceLevel,omitempty" json:"confidenceLevel,omitempty"`
 
 	DetectEventTriggerConfig DetectEventTriggerConfig `yaml:"detectEventTriggerConfig" json:"detectEventTriggerConfig"`

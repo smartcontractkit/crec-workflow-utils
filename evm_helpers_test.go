@@ -267,6 +267,29 @@ func TestEVMHelpers_NewEVMLogFilter(t *testing.T) {
 	})
 }
 
+func TestConfidenceLevelFromString(t *testing.T) {
+	tests := []struct {
+		name     string
+		in       string
+		expected evm.ConfidenceLevel
+	}{
+		{"empty", "", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
+		{"whitespace_only", "  ", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
+		{"unknown", "unknown", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
+		{"latest_lower", "latest", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
+		{"latest_mixed", "LATEST", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
+		{"safe_lower", "safe", evm.ConfidenceLevel_CONFIDENCE_LEVEL_SAFE},
+		{"safe_mixed", "SAFE", evm.ConfidenceLevel_CONFIDENCE_LEVEL_SAFE},
+		{"finalized_lower", "finalized", evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED},
+		{"finalized_mixed", "FINALIZED", evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, workflows.ConfidenceLevelFromString(tt.in))
+		})
+	}
+}
+
 func ptrUint64(v uint64) *uint64 {
 	return &v
 }

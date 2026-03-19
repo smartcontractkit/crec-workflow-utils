@@ -17,7 +17,7 @@ const (
 // Management and defaults:
 //   - Pass nil for rc to use the library defaults (3 attempts, initial delay 5s).
 //   - Pass a non-nil value to override; fields that are "unset" fall back to the same defaults:
-//     MaxAttempts 0 means 3; InitialDelay "" or a string that [time.ParseDuration] rejects means 5s.
+//     MaxAttempts less than or equal to 0 means 3; InitialDelay "" or a string that [time.ParseDuration] rejects means 5s.
 //   - InitialDelay must be a duration string accepted by ParseDuration (e.g. "5s", "1s", "500ms").
 //
 // Workflows that load retry settings from their own YAML/JSON can define a struct that embeds or
@@ -47,7 +47,7 @@ func resolveRetry(rc *RetryConfig) (attempts int, initialDelay time.Duration) {
 		effective = defaultRetryConfig()
 	}
 	attempts = effective.MaxAttempts
-	if attempts == 0 {
+	if attempts <= 0 {
 		attempts = defaultRetryMaxAttempts
 	}
 	delayStr := effective.InitialDelay
@@ -68,7 +68,7 @@ func StopRetry(err error) error {
 
 // Retry is a generic helper to retry operations up to a fixed number of times.
 // It uses an exponential backoff strategy; the starting delay comes from rc (see [RetryConfig]).
-// If the operation fails after all Attempts, it returns the last error wrapped with context.
+// If the operation fails after all attempts are exhausted, it returns the last error wrapped with context.
 // It stops retrying immediately if the function returns an error wrapped with StopRetry.
 func Retry[T any](logger *slog.Logger, name string, rc *RetryConfig, fn func() (T, error)) (T, error) {
 	attempts, delayDuration := resolveRetry(rc)
@@ -96,5 +96,5 @@ func Retry[T any](logger *slog.Logger, name string, rc *RetryConfig, fn func() (
 			logger.Warn("operation failed", "operation", name, "error", err)
 		}
 	}
-	return val, fmt.Errorf("%s failed after %d Attempts: %w", name, attempts, err)
+	return val, fmt.Errorf("%s failed after %d attempts: %w", name, attempts, err)
 }
