@@ -3,6 +3,7 @@ package workflows
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	gethCommon "github.com/ethereum/go-ethereum/common"
@@ -25,10 +26,22 @@ func PBToUint64(b *pb.BigInt) uint64 {
 	return u
 }
 
-// NewEVMLogFilter returns a FilterLogTriggerRequest for a single-address subscription for one or more events,
-// using FINALIZED confidence (common default across listeners).
-// Includes wildcard slots for up to 3 indexed parameters.
-func NewEVMLogFilter(contractAddr string, eventSigHashes [][]byte) *evm.FilterLogTriggerRequest {
+func ConfidenceLevelFromString(s string) evm.ConfidenceLevel {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "finalized":
+		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED
+	case "safe":
+		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_SAFE
+	case "latest":
+		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST
+	default:
+		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST
+	}
+}
+
+// NewEVMLogFilter returns a FilterLogTriggerRequest for a single-address subscription for one or more events.
+// Includes wildcard slots for up to 3 indexed parameters. Confidence is chosen by the caller.
+func NewEVMLogFilter(contractAddr string, eventSigHashes [][]byte, confidence evm.ConfidenceLevel) *evm.FilterLogTriggerRequest {
 	return &evm.FilterLogTriggerRequest{
 		Addresses: [][]byte{
 			gethCommon.HexToAddress(contractAddr).Bytes(),
@@ -39,7 +52,7 @@ func NewEVMLogFilter(contractAddr string, eventSigHashes [][]byte) *evm.FilterLo
 			{},                       // Topic 2 (indexed param wildcard)
 			{},                       // Topic 3 (indexed param wildcard)
 		},
-		Confidence: evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED,
+		Confidence: confidence,
 	}
 }
 
@@ -101,4 +114,3 @@ func TxHashFromLog(l *evm.Log) string {
 	}
 	return gethCommon.BytesToHash(l.TxHash).Hex()
 }
-

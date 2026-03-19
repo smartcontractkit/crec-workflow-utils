@@ -146,7 +146,7 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 	client := &httpcap.Client{}
 
 	// Retry only the network request, not the entire event processing/signing.
-	_, err = Retry(slog.Default(), "post_verifiable_event", func() (int, error) {
+	_, err = Retry(slog.Default(), "post_verifiable_event", defaultRetryConfig(), func() (int, error) {
 		url := strings.TrimRight(cfg.CourierURL, "/") + "/system/v1/onchain-watcher-events"
 		return httpcap.SendRequest(
 			cfg,

@@ -255,7 +255,7 @@ func TestEVMHelpers_NewEVMLogFilter(t *testing.T) {
 		eventSigHash1 := []byte{0x01, 0x02, 0x03, 0x04}
 		eventSigHash2 := []byte{0x05, 0x06, 0x07, 0x08}
 
-		result := workflows.NewEVMLogFilter(contractAddr, [][]byte{eventSigHash1, eventSigHash2})
+		result := workflows.NewEVMLogFilter(contractAddr, [][]byte{eventSigHash1, eventSigHash2}, evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST)
 
 		require.NotNil(t, result)
 		assert.Len(t, result.Addresses, 1)
@@ -263,11 +263,10 @@ func TestEVMHelpers_NewEVMLogFilter(t *testing.T) {
 		assert.Len(t, result.Topics[0].Values, 2)
 		assert.Contains(t, result.Topics[0].Values, eventSigHash1)
 		assert.Contains(t, result.Topics[0].Values, eventSigHash2)
-		assert.Equal(t, evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED, result.Confidence)
+		assert.Equal(t, evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST, result.Confidence)
 	})
 }
 
 func ptrUint64(v uint64) *uint64 {
 	return &v
 }
-

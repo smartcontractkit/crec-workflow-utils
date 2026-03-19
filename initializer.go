@@ -32,7 +32,8 @@ func InitEventListenerWorkflow(cfg *Config, handler LogHandler) (cre.Workflow[*C
 		return nil, fmt.Errorf("no valid event names found to trigger on")
 	}
 
-	filter := NewEVMLogFilter(cfg.DetectEventTriggerConfig.ContractAddress, eventSigHashes)
+	confidence := ConfidenceLevelFromString(cfg.ConfidenceLevel)
+	filter := NewEVMLogFilter(cfg.DetectEventTriggerConfig.ContractAddress, eventSigHashes, confidence)
 	// Convert chainSelector string to uint64 for EVM client
 	chainSelector, err := strconv.ParseUint(cfg.ChainSelector, 10, 64)
 	if err != nil {
@@ -46,4 +47,3 @@ func InitEventListenerWorkflow(cfg *Config, handler LogHandler) (cre.Workflow[*C
 		),
 	}, nil
 }
-

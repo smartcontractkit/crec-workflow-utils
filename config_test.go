@@ -205,6 +205,7 @@ chainSelector: "11155111"
 courierURL: https://courier.example.com
 watcherID: test-watcher
 workflowName: test-workflow
+confidenceLevel: safe
 detectEventTriggerConfig:
   contractName: TestContract
   contractAddress: "0x1234"
@@ -215,12 +216,13 @@ detectEventTriggerConfig:
 				assert.Equal(t, "evm", cfg.Network)
 				assert.Equal(t, "1", cfg.ChainID)
 				assert.Equal(t, "11155111", cfg.ChainSelector)
+				assert.Equal(t, "safe", cfg.ConfidenceLevel)
 				assert.Equal(t, "TestContract", cfg.DetectEventTriggerConfig.ContractName)
 				assert.Equal(t, []string{"Transfer"}, cfg.DetectEventTriggerConfig.ContractEventNames)
 			},
 		},
 		{
-			name: "parses valid JSON config",
+			name: "parses valid JSON config (confidenceLevel defaults to latest)",
 			input: []byte(`{
 				"network": "evm",
 				"chainID": "1",
@@ -235,6 +237,7 @@ detectEventTriggerConfig:
 			validate: func(t *testing.T, cfg *workflows.Config) {
 				assert.Equal(t, "evm", cfg.Network)
 				assert.Equal(t, "16015286601757825753", cfg.ChainSelector)
+				assert.Equal(t, "latest", cfg.ConfidenceLevel)
 				assert.Equal(t, "MyContract", cfg.DetectEventTriggerConfig.ContractName)
 				assert.Equal(t, []string{"EventA", "EventB"}, cfg.DetectEventTriggerConfig.ContractEventNames)
 			},
