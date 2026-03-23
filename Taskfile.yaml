@@ -21,8 +21,8 @@ tasks:
     silent: true
     desc: "Run tests with coverage report"
     cmds:
-      - go test -coverprofile=coverage.out ./...
-      - go tool cover -func=coverage.out
+      - go test -coverprofile=coverage/coverage.out ./...
+      - go tool cover -func=coverage/coverage.out
 
   lint:
     silent: true

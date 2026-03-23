@@ -1,8 +1,10 @@
 package workflows
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/smartcontractkit/crec-api-go/models"
@@ -76,25 +78,30 @@ type PaymentRequest struct {
 	CustomCallback  *PaymentCallback `json:"customCallback,omitempty"` // The custom callback to be used for the payment request.
 }
 
-// Fixed2 represents a fixed-point decimal number with 2 decimal places, stored as a string.
+// Fixed2 represents a fixed-point decimal number with 2 decimal places, serialized as a quoted JSON string.
 type Fixed2 float64
 
-// MarshalJSON marshals the Fixed2 value to a JSON string.
+// MarshalJSON marshals the Fixed2 value as a quoted JSON string (e.g. "123.45").
 func (f Fixed2) MarshalJSON() ([]byte, error) {
-	return fmt.Appendf(nil, "%.2f", f), nil
+	v := float64(f)
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return nil, fmt.Errorf("Fixed2: cannot marshal %v to JSON", v)
+	}
+	return fmt.Appendf(nil, `"%.2f"`, f), nil
 }
 
-// UnmarshalJSON unmarshals the Fixed2 value from a JSON string.
+// UnmarshalJSON unmarshals the Fixed2 value from a JSON number or quoted string.
 func (f *Fixed2) UnmarshalJSON(data []byte) error {
-	// Try unmarshaling as a float64
 	var num float64
 	err := json.Unmarshal(data, &num)
 	if err == nil {
+		if math.IsNaN(num) || math.IsInf(num, 0) {
+			return fmt.Errorf("Fixed2: NaN and Inf are not allowed")
+		}
 		*f = Fixed2(num)
 		return nil
 	}
 
-	// Fallback: try as a quoted string
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
 		return fmt.Errorf("Fixed2: invalid JSON input: %w", err)
@@ -102,6 +109,9 @@ func (f *Fixed2) UnmarshalJSON(data []byte) error {
 	parsed, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return fmt.Errorf("Fixed2: cannot parse string value: %w", err)
+	}
+	if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+		return fmt.Errorf("Fixed2: NaN and Inf are not allowed")
 	}
 	*f = Fixed2(parsed)
 	return nil
@@ -115,6 +125,7 @@ type PaymentCallback struct {
 }
 
 // GetReferenceDataFromVerifiableEvent extracts the ReferenceData from the verifiable event data field if it exists.
+// It uses json.Decoder with UseNumber to preserve numeric precision in reference data fields.
 func GetReferenceDataFromVerifiableEvent(verifiableEvent models.VerifiableEvent) (*ReferenceData, error) {
 	if verifiableEvent.Data == nil {
 		return nil, nil
@@ -124,16 +135,18 @@ func GetReferenceDataFromVerifiableEvent(verifiableEvent models.VerifiableEvent)
 		return nil, fmt.Errorf("failed to marshal verifiable event data: %w", err)
 	}
 	var typeAndValue TypeAndValue
-	err = json.Unmarshal(dataBytes, &typeAndValue)
-	if err != nil {
+	dec := json.NewDecoder(bytes.NewReader(dataBytes))
+	dec.UseNumber()
+	if err := dec.Decode(&typeAndValue); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal type and value from verifiable event data: %w", err)
 	}
 	if typeAndValue.Type != RawMessageTypeReferenceData {
 		return nil, fmt.Errorf("verifiable event data type is %s, expected %s", typeAndValue.Type, RawMessageTypeReferenceData)
 	}
 	var referenceData ReferenceData
-	err = json.Unmarshal(typeAndValue.Value, &referenceData)
-	if err != nil {
+	dec2 := json.NewDecoder(bytes.NewReader(typeAndValue.Value))
+	dec2.UseNumber()
+	if err := dec2.Decode(&referenceData); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal reference data from verifiable event data: %w", err)
 	}
 	return &referenceData, nil

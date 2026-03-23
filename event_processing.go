@@ -24,15 +24,18 @@ import (
 // GetEventNameFromLog identifies the event name matching the log's topic hash
 // by checking against the list of configured ContractEventNames and the ABI.
 func GetEventNameFromLog(cfg *Config, payload *evm.Log, abiJSON string) (string, error) {
-	if len(payload.Topics) == 0 {
-		return "", fmt.Errorf("log has no topics")
-	}
-	topic0 := payload.Topics[0]
-
 	parsedABI, err := gethAbi.JSON(strings.NewReader(abiJSON))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse ABI: %w", err)
 	}
+	return eventNameFromABI(cfg, payload, parsedABI)
+}
+
+func eventNameFromABI(cfg *Config, payload *evm.Log, parsedABI gethAbi.ABI) (string, error) {
+	if len(payload.Topics) == 0 {
+		return "", fmt.Errorf("log has no topics")
+	}
+	topic0 := payload.Topics[0]
 
 	for _, name := range cfg.DetectEventTriggerConfig.ContractEventNames {
 		eventDef, ok := parsedABI.Events[name]
@@ -46,27 +49,44 @@ func GetEventNameFromLog(cfg *Config, payload *evm.Log, abiJSON string) (string,
 
 // BuildEVMEventFromLog constructs an EVMEvent from the given evm.Log payload,
 // decoding parameters using the contract ABI specified in cfg.
+// The ABI is parsed once and reused for all operations to avoid redundant parsing.
 func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*models.EVMEvent, error) {
-	blockTimestamp := GetBlockTimestamp(rt, EnsureChainSelector(cfg, cfg.ChainSelector), payload.BlockNumber)
-	abi, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
+	blockTimestamp, err := GetBlockTimestamp(rt, EnsureChainSelector(cfg, cfg.ChainSelector), payload.BlockNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block timestamp: %w", err)
+	}
+
+	abiJSON, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
 	if err != nil {
 		return nil, err
 	}
 
-	eventName, err := GetEventNameFromLog(cfg, payload, abi)
+	parsedABI, err := gethAbi.JSON(strings.NewReader(abiJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ABI: %w", err)
+	}
+
+	eventName, err := eventNameFromABI(cfg, payload, parsedABI)
 	if err != nil {
 		return nil, err
 	}
 
-	params, err := DecodeEventParams(abi, eventName, payload)
+	params, err := decodeEventParamsFromABI(parsedABI, eventName, payload)
 	if err != nil {
 		return nil, err
 	}
+
+	eventDef, ok := parsedABI.Events[eventName]
+	var eventSig string
+	if ok {
+		eventSig = eventDef.Sig
+	}
+
 	return &models.EVMEvent{
 		Address:        gethCommon.BytesToAddress(payload.Address).Hex(),
 		BlockNumber:    PBToUint64(payload.BlockNumber),
 		BlockTimestamp: blockTimestamp,
-		EventSignature: GetEventSignature(cfg, eventName),
+		EventSignature: eventSig,
 		LogIndex:       payload.Index,
 		Params:         &params,
 		TopicHash:      "0x" + hex.EncodeToString(payload.Topics[0]),
@@ -99,7 +119,7 @@ func BuildVerifiableEventForEVMEvent(
 }
 
 // SignAndPostVerifiableEvent performs identical-consensus report generation and posts the signed event
-// to the Courier /onchain-watcher-events endpoint. It returns the base64 verifiable event.
+// to the Courier /onchain-watcher-events endpoint. It returns the base64-encoded verifiable event.
 func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.VerifiableEvent) (string, error) {
 	encodedVerifiableEvent, err := EncodeVerifiableEvent(ve)
 	if err != nil {
@@ -124,7 +144,6 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 	}
 	rpb := report.X_GeneratedCodeOnly_Unwrap()
 
-	// Compose HTTP body
 	bodyMap := map[string]any{
 		"watcher_id":       cfg.WatcherID,
 		"ocr_report":       "0x" + hex.EncodeToString(rpb.RawReport),
@@ -140,12 +159,10 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 	}
 	body, _ := json.Marshal(bodyMap)
 
-	// HTTP POST with identical consensus
-	// We aggregate only the integer StatusCode to ensure compatibility with Identical consensus.
 	client := &httpcap.Client{}
 
 	// Retry only the network request, not the entire event processing/signing.
-	_, err = Retry(slog.Default(), "post_verifiable_event", defaultRetryConfig(), func() (int, error) {
+	_, err = Retry(slog.Default(), "post_verifiable_event", nil, func() (int, error) {
 		url := strings.TrimRight(cfg.CourierURL, "/") + "/system/v1/onchain-watcher-events"
 		return httpcap.SendRequest(
 			cfg,
@@ -168,8 +185,6 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 				if resp == nil {
 					return 0, fmt.Errorf("nil response")
 				}
-				// Treat 4xx as deterministic errors (except 408/429) and stop retry.
-				// Treat 5xx as retriable errors.
 				if resp.StatusCode >= 400 {
 					err := fmt.Errorf("courier API responded with status %d when trying to hit url %s", resp.StatusCode, url)
 					if resp.StatusCode < 500 && resp.StatusCode != 408 && resp.StatusCode != 429 {
@@ -186,7 +201,7 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 		return "", err
 	}
 
-	return eventHash.String(), nil
+	return encodedVerifiableEvent, nil
 }
 
 // toSnakeCase converts "CamelCase" -> "camel_case".
@@ -341,18 +356,21 @@ func CheckResponse(resp *httpcap.Response) (*httpcap.Response, error) {
 // It returns parameters with snake_case keys and values sanitised via SanitiseJSON.
 // It always returns a params map (possibly empty) even when an error occurs parsing ABI or event.
 func DecodeEventParams(abiJSON, eventName string, log *evm.Log) (map[string]any, error) {
-	params := make(map[string]any)
-
 	parsedABI, err := gethAbi.JSON(strings.NewReader(abiJSON))
 	if err != nil {
-		return params, err
+		return make(map[string]any), err
 	}
+	return decodeEventParamsFromABI(parsedABI, eventName, log)
+}
+
+func decodeEventParamsFromABI(parsedABI gethAbi.ABI, eventName string, log *evm.Log) (map[string]any, error) {
+	params := make(map[string]any)
+
 	eventDefinition, ok := parsedABI.Events[eventName]
 	if !ok {
 		return params, fmt.Errorf("event %q not found in ABI", eventName)
 	}
 
-	// Non-indexed (in data)
 	nonIndexed := eventDefinition.Inputs.NonIndexed()
 	if len(log.Data) > 0 && len(nonIndexed) > 0 {
 		vals, err := nonIndexed.Unpack(log.Data)
@@ -364,8 +382,7 @@ func DecodeEventParams(abiJSON, eventName string, log *evm.Log) (map[string]any,
 		}
 	}
 
-	// Indexed (in topics[1:])
-	topicIdx := 1 // topics[0] is the event signature
+	topicIdx := 1
 	for _, arg := range eventDefinition.Inputs {
 		if !arg.Indexed {
 			continue
@@ -395,7 +412,6 @@ func DecodeEventParams(abiJSON, eventName string, log *evm.Log) (map[string]any,
 				decoded = false
 			}
 		case gethAbi.FixedBytesTy, gethAbi.BytesTy, gethAbi.StringTy:
-			// For dynamic types indexed, the topic is keccak256(value); keep hex
 			decoded = raw
 		default:
 			decoded = raw

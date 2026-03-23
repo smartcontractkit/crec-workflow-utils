@@ -9,7 +9,7 @@
 *.test
 
 # Output of go coverage
-coverage.out
+coverage/
 
 # Taskfile
 .task/

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	gethCommon "github.com/ethereum/go-ethereum/common"
 
@@ -79,23 +78,27 @@ func ParseChainSelector(chainSelectorStr *string) (*uint64, error) {
 	return &chainSelector, nil
 }
 
-// GetBlockTimestamp fetches the block timestamp via EVM HeaderByNumber; falls back to current UTC time if unavailable.
-func GetBlockTimestamp(rt cre.Runtime, chainSelector string, blockNumber *pb.BigInt) uint64 {
+// GetBlockTimestamp fetches the block timestamp via EVM HeaderByNumber.
+// It returns an error if the block number is nil or the header cannot be fetched,
+// rather than falling back to wall-clock time which would break cross-node consensus.
+func GetBlockTimestamp(rt cre.Runtime, chainSelector string, blockNumber *pb.BigInt) (uint64, error) {
 	if blockNumber == nil {
-		return uint64(time.Now().UTC().Unix())
+		return 0, fmt.Errorf("block number is nil")
 	}
-	// convert chainSelector to uint64
 	chainSelectorUint64, err := ParseChainSelector(&chainSelector)
 	if err != nil {
-		return uint64(time.Now().UTC().Unix())
+		return 0, fmt.Errorf("invalid chain selector for timestamp lookup: %w", err)
 	}
 
 	cli := &evm.Client{ChainSelector: *chainSelectorUint64}
 	hdr, err := cli.HeaderByNumber(rt, &evm.HeaderByNumberRequest{BlockNumber: blockNumber}).Await()
-	if err != nil || hdr == nil || hdr.Header == nil {
-		return uint64(time.Now().UTC().Unix())
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch block header: %w", err)
 	}
-	return hdr.Header.Timestamp
+	if hdr == nil || hdr.Header == nil {
+		return 0, fmt.Errorf("block header is nil for block %d", PBToUint64(blockNumber))
+	}
+	return hdr.Header.Timestamp, nil
 }
 
 // CursorFromPB builds a "block-logIndex-txHash" cursor string from pb.BigInt block-number, a log-index,

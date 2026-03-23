@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"time"
 )
 
@@ -66,8 +67,14 @@ func StopRetry(err error) error {
 	return &nonRetriableError{err}
 }
 
+// jitter applies ±25% randomization to the given duration to avoid synchronized retry bursts.
+func jitter(d time.Duration) time.Duration {
+	delta := float64(d) * 0.25
+	return d + time.Duration((rand.Float64()*2-1)*delta)
+}
+
 // Retry is a generic helper to retry operations up to a fixed number of times.
-// It uses an exponential backoff strategy; the starting delay comes from rc (see [RetryConfig]).
+// It uses an exponential backoff strategy with jitter (±25%); the starting delay comes from rc (see [RetryConfig]).
 // If the operation fails after all attempts are exhausted, it returns the last error wrapped with context.
 // It stops retrying immediately if the function returns an error wrapped with StopRetry.
 func Retry[T any](logger *slog.Logger, name string, rc *RetryConfig, fn func() (T, error)) (T, error) {
@@ -76,10 +83,11 @@ func Retry[T any](logger *slog.Logger, name string, rc *RetryConfig, fn func() (
 	var err error
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
+			jitteredDelay := jitter(delayDuration)
 			if logger != nil {
-				logger.Info("retrying operation", "operation", name, "attempt", i+1, "delay", delayDuration)
+				logger.Info("retrying operation", "operation", name, "attempt", i+1, "delay", jitteredDelay)
 			}
-			time.Sleep(delayDuration)
+			time.Sleep(jitteredDelay)
 			delayDuration *= 2
 		}
 		val, err = fn()

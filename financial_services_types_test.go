@@ -2,6 +2,7 @@ package workflows_test
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 
 	workflows "github.com/smartcontractkit/crec-workflow-utils"
@@ -15,42 +16,62 @@ func TestFinancialServicesTypes_Fixed2_MarshalJSON(t *testing.T) {
 		name     string
 		value    workflows.Fixed2
 		expected string
+		wantErr  bool
 	}{
 		{
-			name:     "marshals zero",
+			name:     "marshals zero as quoted string",
 			value:    workflows.Fixed2(0),
-			expected: "0.00",
+			expected: `"0.00"`,
 		},
 		{
-			name:     "marshals positive integer",
+			name:     "marshals positive integer as quoted string",
 			value:    workflows.Fixed2(100),
-			expected: "100.00",
+			expected: `"100.00"`,
 		},
 		{
 			name:     "marshals decimal with 2 places",
 			value:    workflows.Fixed2(123.45),
-			expected: "123.45",
+			expected: `"123.45"`,
 		},
 		{
 			name:     "truncates to 2 decimal places",
 			value:    workflows.Fixed2(99.999),
-			expected: "100.00",
+			expected: `"100.00"`,
 		},
 		{
 			name:     "marshals negative value",
 			value:    workflows.Fixed2(-50.25),
-			expected: "-50.25",
+			expected: `"-50.25"`,
 		},
 		{
 			name:     "marshals large value",
 			value:    workflows.Fixed2(1000000.99),
-			expected: "1000000.99",
+			expected: `"1000000.99"`,
+		},
+		{
+			name:    "rejects NaN",
+			value:   workflows.Fixed2(math.NaN()),
+			wantErr: true,
+		},
+		{
+			name:    "rejects positive Inf",
+			value:   workflows.Fixed2(math.Inf(1)),
+			wantErr: true,
+		},
+		{
+			name:    "rejects negative Inf",
+			value:   workflows.Fixed2(math.Inf(-1)),
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := tc.value.MarshalJSON()
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, string(result))
 		})
@@ -95,6 +116,21 @@ func TestFinancialServicesTypes_Fixed2_UnmarshalJSON(t *testing.T) {
 			wantErr:  false,
 		},
 		{
+			name:    "rejects quoted NaN",
+			input:   `"NaN"`,
+			wantErr: true,
+		},
+		{
+			name:    "rejects quoted Inf",
+			input:   `"Inf"`,
+			wantErr: true,
+		},
+		{
+			name:    "rejects quoted negative Inf",
+			input:   `"-Inf"`,
+			wantErr: true,
+		},
+		{
 			name:    "fails on invalid string",
 			input:   `"not a number"`,
 			wantErr: true,
@@ -131,6 +167,9 @@ func TestFinancialServicesTypes_Fixed2_RoundTrip(t *testing.T) {
 
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
+
+	// Verify the marshaled JSON uses a quoted string
+	assert.Contains(t, string(data), `"amount":"1234.56"`)
 
 	var decoded Wrapper
 	err = json.Unmarshal(data, &decoded)
