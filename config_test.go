@@ -200,7 +200,6 @@ func TestConfig_ParseWorkflowConfig(t *testing.T) {
 			name: "parses valid YAML config",
 			input: []byte(`
 network: evm
-chainID: "1"
 chainSelector: "11155111"
 courierURL: https://courier.example.com
 watcherID: test-watcher
@@ -214,7 +213,6 @@ detectEventTriggerConfig:
 			wantErr: false,
 			validate: func(t *testing.T, cfg *workflows.Config) {
 				assert.Equal(t, "evm", cfg.Network)
-				assert.Equal(t, "1", cfg.ChainID)
 				assert.Equal(t, "11155111", cfg.ChainSelector)
 				assert.Equal(t, "safe", cfg.ConfidenceLevel)
 				assert.Equal(t, "TestContract", cfg.DetectEventTriggerConfig.ContractName)
@@ -225,7 +223,6 @@ detectEventTriggerConfig:
 			name: "parses valid JSON config (confidenceLevel defaults to latest)",
 			input: []byte(`{
 				"network": "evm",
-				"chainID": "1",
 				"chainSelector": "16015286601757825753",
 				"courierURL": "https://courier.example.com",
 				"detectEventTriggerConfig": {
@@ -244,13 +241,13 @@ detectEventTriggerConfig:
 		},
 		{
 			name:        "fails when chainSelector is missing",
-			input:       []byte(`{"network": "evm", "chainID": "1"}`),
+			input:       []byte(`{"network": "evm"}`),
 			wantErr:     true,
 			errContains: "chain selector is required",
 		},
 		{
 			name:        "fails when chainSelector is zero",
-			input:       []byte(`{"network": "evm", "chainID": "1", "chainSelector": "0"}`),
+			input:       []byte(`{"network": "evm", "chainSelector": "0"}`),
 			wantErr:     true,
 			errContains: "chain selector is required",
 		},

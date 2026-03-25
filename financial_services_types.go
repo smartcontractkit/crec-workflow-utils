@@ -71,7 +71,6 @@ type PaymentRequest struct {
 	Sender          string           `json:"sender"`                   // The sender of the payment request.
 	Receiver        string           `json:"receiver"`                 // The receiver of the payment.
 	Currency        string           `json:"currency"`                 // The currency of the payment.
-	ChainID         string           `json:"chainId"`                  // The chain ID of the payment.
 	Amount          Fixed2           `json:"amount"`                   // The amount of the payment in fixed-point decimal format with 2 decimal places.
 	Expiration      *int64           `json:"expiration,omitempty"`     // The expiration time of the payment request in seconds since epoch.
 	CustomCallback  *PaymentCallback `json:"customCallback,omitempty"` // The custom callback to be used for the payment request.

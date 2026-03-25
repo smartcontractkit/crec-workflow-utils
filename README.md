@@ -96,7 +96,6 @@ Example config structure:
 
 ```yaml
 network: "sepolia"
-chainID: "11155111"
 chainSelector: "16015286601757825753"
 courierURL: "https://courier.example.com"
 watcherID: "my-watcher-id"

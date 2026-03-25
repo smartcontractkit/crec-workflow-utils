@@ -14,7 +14,6 @@ import (
 // compatible with server-side gomplate rendering used during e2e runs.
 type Config struct {
 	Network       string  `yaml:"network"                json:"network"`
-	ChainID       string  `yaml:"chainID"                json:"chainID"`
 	CourierURL    string  `yaml:"courierURL"             json:"courierURL"`
 	Service       *string `yaml:"service,omitempty"      json:"service,omitempty"`
 	ApiKeySecret  string  `yaml:"apiKeySecret,omitempty" json:"apiKeySecret,omitempty"`

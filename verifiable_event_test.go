@@ -327,13 +327,11 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 			name: "builds verifiable event with all fields",
 			cfg: &workflows.Config{
 				ChainSelector: "11155111",
-				ChainID:       "11155111",
 			},
 			evmEvent: &models.EVMEvent{
 				Address:        "0x1234567890123456789012345678901234567890",
 				BlockNumber:    12345,
 				BlockTimestamp: 1700000000,
-				ChainId:        "11155111",
 				EventSignature: "Transfer(address,address,uint256)",
 				LogIndex:       5,
 				TopicHash:      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
@@ -363,13 +361,11 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 			name: "builds event without optional data",
 			cfg: &workflows.Config{
 				ChainSelector: "1",
-				ChainID:       "1",
 			},
 			evmEvent: &models.EVMEvent{
 				Address:        "0xabcdef1234567890abcdef1234567890abcdef12",
 				BlockNumber:    100,
 				BlockTimestamp: 1600000000,
-				ChainId:        "1",
 				EventSignature: "Approval(address,address,uint256)",
 				LogIndex:       0,
 				TopicHash:      "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
@@ -394,13 +390,11 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 			name: "uses chain selector from config",
 			cfg: &workflows.Config{
 				ChainSelector: "16015286601757825753",
-				ChainID:       "11155111",
 			},
 			evmEvent: &models.EVMEvent{
 				Address:        "0x1234567890123456789012345678901234567890",
 				BlockNumber:    999,
 				BlockTimestamp: 1650000000,
-				ChainId:        "11155111",
 				EventSignature: "TestEvent()",
 				LogIndex:       1,
 				TopicHash:      "0x1234",
@@ -419,13 +413,11 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 			name: "builds event with nil service for workflows not scoped to a service",
 			cfg: &workflows.Config{
 				ChainSelector: "11155111",
-				ChainID:       "11155111",
 			},
 			evmEvent: &models.EVMEvent{
 				Address:        "0x1234567890123456789012345678901234567890",
 				BlockNumber:    12345,
 				BlockTimestamp: 1700000000,
-				ChainId:        "11155111",
 				EventSignature: "GenericEvent()",
 				LogIndex:       5,
 				TopicHash:      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",

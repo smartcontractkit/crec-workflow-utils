@@ -66,7 +66,6 @@ func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*model
 		Address:        gethCommon.BytesToAddress(payload.Address).Hex(),
 		BlockNumber:    PBToUint64(payload.BlockNumber),
 		BlockTimestamp: blockTimestamp,
-		ChainId:        cfg.ChainID,
 		EventSignature: GetEventSignature(cfg, eventName),
 		LogIndex:       payload.Index,
 		Params:         &params,
