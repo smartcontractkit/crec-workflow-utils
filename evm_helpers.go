@@ -89,6 +89,9 @@ func GetBlockTimestamp(rt cre.Runtime, chainSelector string, blockNumber *pb.Big
 	if err != nil {
 		return 0, fmt.Errorf("invalid chain selector for timestamp lookup: %w", err)
 	}
+	if chainSelectorUint64 == nil {
+		return 0, fmt.Errorf("chain selector is empty")
+	}
 
 	cli := &evm.Client{ChainSelector: *chainSelectorUint64}
 	hdr, err := cli.HeaderByNumber(rt, &evm.HeaderByNumberRequest{BlockNumber: blockNumber}).Await()

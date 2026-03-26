@@ -21,6 +21,7 @@ tasks:
     silent: true
     desc: "Run tests with coverage report"
     cmds:
+      - mkdir -p coverage
       - go test -coverprofile=coverage/coverage.out ./...
       - go tool cover -func=coverage/coverage.out
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/smartcontractkit/chainlink-protos/cre/go/values/pb"
 	"github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm"
+	"github.com/smartcontractkit/cre-sdk-go/cre"
 	workflows "github.com/smartcontractkit/crec-workflow-utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -265,6 +266,39 @@ func TestEVMHelpers_NewEVMLogFilter(t *testing.T) {
 		assert.Contains(t, result.Topics[0].Values, eventSigHash2)
 		assert.Equal(t, evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST, result.Confidence)
 	})
+}
+
+func TestEVMHelpers_GetBlockTimestamp(t *testing.T) {
+	testCases := []struct {
+		name           string
+		chainSelector  string
+		blockNumber    *pb.BigInt
+		runtime        cre.Runtime
+		wantErrContain string
+	}{
+		{
+			name:           "nil block number",
+			chainSelector:  "11155111",
+			blockNumber:    nil,
+			runtime:        nil,
+			wantErrContain: "block number is nil",
+		},
+		{
+			name:           "empty chain selector",
+			chainSelector:  "",
+			blockNumber:    &pb.BigInt{AbsVal: []byte{0x01}},
+			runtime:        nil,
+			wantErrContain: "chain selector is empty",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := workflows.GetBlockTimestamp(tc.runtime, tc.chainSelector, tc.blockNumber)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErrContain)
+		})
+	}
 }
 
 func TestConfidenceLevelFromString(t *testing.T) {
