@@ -117,4 +117,4 @@ go test ./...
 
 ## License
 
-[MIT](LICENSE.md)
+[BUSL](LICENSE)
