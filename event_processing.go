@@ -162,7 +162,8 @@ func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.Verifiab
 	client := &httpcap.Client{}
 
 	// Retry only the network request, not the entire event processing/signing.
-	_, err = Retry(slog.Default(), "post_verifiable_event", nil, func() (int, error) {
+	// MaxAttempts=3: HTTP calls are fast, safe to retry. CRE limit: 5 HTTP calls/execution.
+	_, err = Retry(slog.Default(), "post_verifiable_event", &RetryConfig{MaxAttempts: 3}, func() (int, error) {
 		url := strings.TrimRight(cfg.CourierURL, "/") + "/system/v1/onchain-watcher-events"
 		return httpcap.SendRequest(
 			cfg,
