@@ -6,9 +6,10 @@ import (
 	"github.com/smartcontractkit/chainlink-protos/cre/go/values/pb"
 	"github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm"
 	"github.com/smartcontractkit/cre-sdk-go/cre"
-	workflows "github.com/smartcontractkit/crec-workflow-utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	workflows "github.com/smartcontractkit/crec-workflow-utils"
 )
 
 func TestEVMHelpers_PBToUint64(t *testing.T) {
@@ -307,9 +308,6 @@ func TestConfidenceLevelFromString(t *testing.T) {
 		in       string
 		expected evm.ConfidenceLevel
 	}{
-		{"empty", "", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
-		{"whitespace_only", "  ", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
-		{"unknown", "unknown", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
 		{"latest_lower", "latest", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
 		{"latest_mixed", "LATEST", evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST},
 		{"safe_lower", "safe", evm.ConfidenceLevel_CONFIDENCE_LEVEL_SAFE},
@@ -318,9 +316,13 @@ func TestConfidenceLevelFromString(t *testing.T) {
 		{"finalized_mixed", "FINALIZED", evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, workflows.ConfidenceLevelFromString(tt.in))
-		})
+		t.Run(
+			tt.name, func(t *testing.T) {
+				confidence, err := workflows.ConfidenceLevelFromString(tt.in)
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, confidence)
+			},
+		)
 	}
 }
 

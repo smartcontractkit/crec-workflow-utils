@@ -1,6 +1,6 @@
 module github.com/smartcontractkit/crec-workflow-utils
 
-go 1.25.3
+go 1.26.3
 
 require (
 	github.com/ethereum/go-ethereum v1.17.0
@@ -9,7 +9,7 @@ require (
 	github.com/smartcontractkit/cre-sdk-go v1.1.2
 	github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm v0.10.0
 	github.com/smartcontractkit/cre-sdk-go/capabilities/networking/http v0.10.0
-	github.com/smartcontractkit/crec-api-go v0.4.1
+	github.com/smartcontractkit/crec-api-go v0.7.0-rc9.0.20260527220410-cd7d36b7db19
 	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1
 )

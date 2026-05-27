@@ -3,9 +3,10 @@ package workflows_test
 import (
 	"testing"
 
-	workflows "github.com/smartcontractkit/crec-workflow-utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	workflows "github.com/smartcontractkit/crec-workflow-utils"
 )
 
 const testTransferABI = `[
@@ -204,7 +205,7 @@ chainSelector: "11155111"
 courierURL: https://courier.example.com
 watcherID: test-watcher
 workflowName: test-workflow
-confidenceLevel: safe
+confidenceLevels: [safe, finalized]
 detectEventTriggerConfig:
   contractName: TestContract
   contractAddress: "0x1234"
@@ -214,7 +215,7 @@ detectEventTriggerConfig:
 			validate: func(t *testing.T, cfg *workflows.Config) {
 				assert.Equal(t, "evm", cfg.Network)
 				assert.Equal(t, "11155111", cfg.ChainSelector)
-				assert.Equal(t, "safe", cfg.ConfidenceLevel)
+				assert.Equal(t, []string{"safe", "finalized"}, *cfg.ConfidenceLevels)
 				assert.Equal(t, "TestContract", cfg.DetectEventTriggerConfig.ContractName)
 				assert.Equal(t, []string{"Transfer"}, cfg.DetectEventTriggerConfig.ContractEventNames)
 			},
@@ -234,7 +235,7 @@ detectEventTriggerConfig:
 			validate: func(t *testing.T, cfg *workflows.Config) {
 				assert.Equal(t, "evm", cfg.Network)
 				assert.Equal(t, "16015286601757825753", cfg.ChainSelector)
-				assert.Equal(t, "latest", cfg.ConfidenceLevel)
+				assert.Equal(t, []string{"latest", "safe", "finalized"}, *cfg.ConfidenceLevels)
 				assert.Equal(t, "MyContract", cfg.DetectEventTriggerConfig.ContractName)
 				assert.Equal(t, []string{"EventA", "EventB"}, cfg.DetectEventTriggerConfig.ContractEventNames)
 			},

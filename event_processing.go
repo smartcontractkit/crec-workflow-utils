@@ -47,10 +47,10 @@ func eventNameFromABI(cfg *Config, payload *evm.Log, parsedABI gethAbi.ABI) (str
 	return "", fmt.Errorf("event not found for topic %x", topic0)
 }
 
-// BuildEVMEventFromLog constructs an EVMEvent from the given evm.Log payload,
+// BuildEVMEventFromLog constructs an EVMEvent from the given evm.Log payload and confidence level,
 // decoding parameters using the contract ABI specified in cfg.
 // The ABI is parsed once and reused for all operations to avoid redundant parsing.
-func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*models.EVMEvent, error) {
+func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log, confidence models.EVMEventConfidence) (*models.EVMEvent, error) {
 	blockTimestamp, err := GetBlockTimestamp(rt, EnsureChainSelector(cfg, cfg.ChainSelector), payload.BlockNumber)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block timestamp: %w", err)
@@ -91,6 +91,7 @@ func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log) (*model
 		Params:         &params,
 		TopicHash:      "0x" + hex.EncodeToString(payload.Topics[0]),
 		TxHash:         "0x" + hex.EncodeToString(payload.TxHash),
+		Confidence:     confidence,
 	}, nil
 }
 

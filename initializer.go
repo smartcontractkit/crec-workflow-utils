@@ -6,17 +6,21 @@ import (
 
 	"github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm"
 	"github.com/smartcontractkit/cre-sdk-go/cre"
+	"github.com/smartcontractkit/crec-api-go/models"
 )
 
 // LogHandler is the function signature implemented by each event-listener workflow's
 // per-project handler (e.g. OnLog, OnCoordinatorLog). It processes an EVM log
 // and returns a base64-encoded verifiable event (or empty string) and an error.
-type LogHandler func(*Config, cre.Runtime, *evm.Log) (string, error)
+type LogHandler func(*Config, cre.Runtime, *evm.Log, models.EVMEventConfidence) (string, error)
 
 // InitEventListenerWorkflow wires the standard EVM Log trigger for event-listener
-// workflows and attaches the provided handler. It resolves the event signatures
-// from the ABI for all events in ContractEventNames and uses cfg.ChainSelector (required in the config).
-func InitEventListenerWorkflow(cfg *Config, handler LogHandler) (cre.Workflow[*Config], error) {
+// workflows and attaches the provided handler - once for each of the supplied confidence levels.
+// It resolves the event signatures from the ABI for all events in ContractEventNames and uses
+// cfg.ChainSelector (required in the config).
+func InitEventListenerWorkflow(
+	cfg *Config, handler LogHandler,
+) (cre.Workflow[*Config], error) {
 	abiJSON, err := GetContractABI(cfg, cfg.DetectEventTriggerConfig.ContractName)
 	if err != nil {
 		return nil, err
@@ -32,18 +36,30 @@ func InitEventListenerWorkflow(cfg *Config, handler LogHandler) (cre.Workflow[*C
 		return nil, fmt.Errorf("no valid event names found to trigger on")
 	}
 
-	confidence := ConfidenceLevelFromString(cfg.ConfidenceLevel)
-	filter := NewEVMLogFilter(cfg.DetectEventTriggerConfig.ContractAddress, eventSigHashes, confidence)
 	// Convert chainSelector string to uint64 for EVM client
 	chainSelector, err := strconv.ParseUint(cfg.ChainSelector, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid chain selector: %w", err)
 	}
 
-	return cre.Workflow[*Config]{
-		cre.Handler(
-			evm.LogTrigger(chainSelector, filter),
-			handler,
-		),
-	}, nil
+	executionHandlers := make([]cre.ExecutionHandler[*Config, cre.Runtime], len(*cfg.ConfidenceLevels))
+
+	for _, confidenceStr := range *cfg.ConfidenceLevels {
+		confidence, err := ConfidenceLevelFromString(confidenceStr)
+		if err != nil {
+			return nil, err
+		}
+		filter := NewEVMLogFilter(cfg.DetectEventTriggerConfig.ContractAddress, eventSigHashes, confidence)
+		executionHandlers = append(
+			executionHandlers, cre.Handler(
+				evm.LogTrigger(chainSelector, filter),
+				func(cfg *Config, rt cre.Runtime, payload *evm.Log) (string, error) {
+					return handler(cfg, rt, payload, models.EVMEventConfidence(confidenceStr))
+				},
+			),
+		)
+
+	}
+
+	return executionHandlers, nil
 }

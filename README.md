@@ -52,7 +52,7 @@ import (
     workflows "github.com/smartcontractkit/crec-workflow-utils"
 )
 
-func OnLog(cfg *workflows.Config, rt cre.Runtime, payload *evm.Log) (string, error) {
+func OnLog(cfg *workflows.Config, rt cre.Runtime, payload *evm.Log, confidenceLevel string) (string, error) {
     evmEvent, err := workflows.BuildEVMEventFromLog(rt, cfg, payload)
     if err != nil {
         return "", err

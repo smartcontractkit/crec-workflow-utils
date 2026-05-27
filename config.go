@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	gethAbi "github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/smartcontractkit/crec-api-go/models"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,9 +21,10 @@ type Config struct {
 	ChainSelector string  `yaml:"chainSelector"          json:"chainSelector"`
 	WatcherID     string  `yaml:"watcherID"              json:"watcherID"`
 	WorkflowName  string  `yaml:"workflowName"           json:"workflowName"`
-	// ConfidenceLevel is the EVM log trigger confidence: "finalized", "safe", or "latest".
-	// Defaults to "latest" when omitted after [ParseWorkflowConfig].
-	ConfidenceLevel string `yaml:"confidenceLevel,omitempty" json:"confidenceLevel,omitempty"`
+
+	// ConfidenceLevels is the list of EVM log trigger confidences: "finalized", "safe", or "latest".
+	// Defaults to `[latest, safe, finalized]` when omitted after [ParseWorkflowConfig].
+	ConfidenceLevels *[]string `yaml:"confidenceLevels,omitempty" json:"confidenceLevels,omitempty"`
 
 	DetectEventTriggerConfig DetectEventTriggerConfig `yaml:"detectEventTriggerConfig" json:"detectEventTriggerConfig"`
 }
@@ -99,8 +101,8 @@ func ParseWorkflowConfig(b []byte) (*Config, error) {
 		return nil, fmt.Errorf("chain selector is required")
 	}
 
-	if strings.TrimSpace(cfg.ConfidenceLevel) == "" {
-		cfg.ConfidenceLevel = "latest"
+	if cfg.ConfidenceLevels == nil || len(*cfg.ConfidenceLevels) == 0 {
+		cfg.ConfidenceLevels = &[]string{string(models.Latest), string(models.Safe), string(models.Finalized)}
 	}
 
 	// No hard validation here; downstream helpers handle defaults/fallbacks.

@@ -25,16 +25,16 @@ func PBToUint64(b *pb.BigInt) uint64 {
 	return u
 }
 
-func ConfidenceLevelFromString(s string) evm.ConfidenceLevel {
+func ConfidenceLevelFromString(s string) (evm.ConfidenceLevel, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "finalized":
-		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED
+		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_FINALIZED, nil
 	case "safe":
-		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_SAFE
+		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_SAFE, nil
 	case "latest":
-		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST
+		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST, nil
 	default:
-		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST
+		return evm.ConfidenceLevel_CONFIDENCE_LEVEL_LATEST, fmt.Errorf("invalid confidence level: %s", s)
 	}
 }
 
