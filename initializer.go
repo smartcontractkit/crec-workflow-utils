@@ -12,7 +12,7 @@ import (
 // LogHandler is the function signature implemented by each event-listener workflow's
 // per-project handler (e.g. OnLog, OnCoordinatorLog). It processes an EVM log
 // and returns a base64-encoded verifiable event (or empty string) and an error.
-type LogHandler func(*Config, cre.Runtime, *evm.Log, models.EVMEventConfidence) (string, error)
+type LogHandler func(*Config, cre.Runtime, *evm.Log, models.ConfidenceLevel) (string, error)
 
 // InitEventListenerWorkflow wires the standard EVM Log trigger for event-listener
 // workflows and attaches the provided handler - once for each of the supplied confidence levels.
@@ -54,7 +54,7 @@ func InitEventListenerWorkflow(
 			executionHandlers, cre.Handler(
 				evm.LogTrigger(chainSelector, filter),
 				func(cfg *Config, rt cre.Runtime, payload *evm.Log) (string, error) {
-					return handler(cfg, rt, payload, models.EVMEventConfidence(confidenceStr))
+					return handler(cfg, rt, payload, models.ConfidenceLevel(confidenceStr))
 				},
 			),
 		)

@@ -102,7 +102,11 @@ func ParseWorkflowConfig(b []byte) (*Config, error) {
 	}
 
 	if cfg.ConfidenceLevels == nil || len(*cfg.ConfidenceLevels) == 0 {
-		cfg.ConfidenceLevels = &[]string{string(models.Latest), string(models.Safe), string(models.Finalized)}
+		cfg.ConfidenceLevels = &[]string{
+			string(models.ConfidenceLevelLatest),
+			string(models.ConfidenceLevelSafe),
+			string(models.ConfidenceLevelFinalized),
+		}
 	}
 
 	// No hard validation here; downstream helpers handle defaults/fallbacks.
