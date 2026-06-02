@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"reflect"
 	"strings"
-	"time"
 
 	gethAbi "github.com/ethereum/go-ethereum/accounts/abi"
 	gethCommon "github.com/ethereum/go-ethereum/common"
@@ -50,7 +49,9 @@ func eventNameFromABI(cfg *Config, payload *evm.Log, parsedABI gethAbi.ABI) (str
 // BuildEVMEventFromLog constructs an EVMEvent from the given evm.Log payload and confidence level,
 // decoding parameters using the contract ABI specified in cfg.
 // The ABI is parsed once and reused for all operations to avoid redundant parsing.
-func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log, confidence models.ConfidenceLevel) (*models.EVMEvent, error) {
+func BuildEVMEventFromLog(
+	rt cre.Runtime, cfg *Config, payload *evm.Log, confidence models.ConfidenceLevel,
+) (*models.EVMEvent, error) {
 	blockTimestamp, err := GetBlockTimestamp(rt, EnsureChainSelector(cfg, cfg.ChainSelector), payload.BlockNumber)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block timestamp: %w", err)
@@ -91,7 +92,7 @@ func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log, confide
 		Params:         &params,
 		TopicHash:      "0x" + hex.EncodeToString(payload.Topics[0]),
 		TxHash:         "0x" + hex.EncodeToString(payload.TxHash),
-		Confidence:     confidence,
+		Confidence:     &confidence,
 	}, nil
 }
 
@@ -99,7 +100,7 @@ func BuildEVMEventFromLog(rt cre.Runtime, cfg *Config, payload *evm.Log, confide
 // with the specified service (optional, can be nil for workflows not scoped to a service),
 // name, and additional data.
 func BuildVerifiableEventForEVMEvent(
-	cfg *Config, ev *models.EVMEvent, service *string, name string, data *map[string]interface{},
+	rt cre.Runtime, cfg *Config, ev *models.EVMEvent, service *string, name string, data *map[string]interface{},
 ) (*models.VerifiableEvent, error) {
 	chainFamily := "evm"
 	chainSelector := cfg.ChainSelector
@@ -109,7 +110,7 @@ func BuildVerifiableEventForEVMEvent(
 		Data:          data,
 		Name:          name,
 		Service:       service,
-		Timestamp:     time.Unix(int64(ev.BlockTimestamp), 0).UTC(),
+		Timestamp:     rt.Now(),
 		ChainEvent:    &models.VerifiableEvent_ChainEvent{},
 	}
 	err := ve.ChainEvent.FromEVMEvent(*ev)
@@ -121,7 +122,7 @@ func BuildVerifiableEventForEVMEvent(
 
 // SignAndPostVerifiableEvent performs identical-consensus report generation and posts the signed event
 // to the Courier /onchain-watcher-events endpoint. It returns the base64-encoded verifiable event.
-func SignAndPostVerifiableEvent(cfg *Config, rt cre.Runtime, ve *models.VerifiableEvent) (string, error) {
+func SignAndPostVerifiableEvent(rt cre.Runtime, cfg *Config, ve *models.VerifiableEvent) (string, error) {
 	encodedVerifiableEvent, err := EncodeVerifiableEvent(ve)
 	if err != nil {
 		return "", err

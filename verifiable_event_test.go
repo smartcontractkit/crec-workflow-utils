@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/smartcontractkit/cre-sdk-go/cre/testutils"
 	"github.com/smartcontractkit/crec-api-go/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -312,6 +313,7 @@ func TestVerifiableEvent_RoundTrip(t *testing.T) {
 }
 
 func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
+	rt := testutils.NewRuntime(t, nil)
 	testCases := []struct {
 		name        string
 		cfg         *workflows.Config
@@ -354,7 +356,7 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 				assert.Equal(t, "dta", *ve.Service)
 				assert.Equal(t, "Transfer", ve.Name)
 				assert.NotNil(t, ve.Data)
-				assert.Equal(t, time.Unix(1700000000, 0).UTC(), ve.Timestamp)
+				assert.Equal(t, rt.Now(), ve.Timestamp)
 			},
 		},
 		{
@@ -435,7 +437,7 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 				assert.Nil(t, ve.Service)
 				assert.Equal(t, "GenericEvent", ve.Name)
 				assert.Nil(t, ve.Data)
-				assert.Equal(t, time.Unix(1700000000, 0).UTC(), ve.Timestamp)
+				assert.Equal(t, rt.Now(), ve.Timestamp)
 			},
 		},
 	}
@@ -444,7 +446,7 @@ func TestEventProcessing_BuildVerifiableEventForEVMEvent(t *testing.T) {
 		t.Run(
 			tc.name, func(t *testing.T) {
 				result, err := workflows.BuildVerifiableEventForEVMEvent(
-					tc.cfg, tc.evmEvent, tc.service, tc.eventName, tc.data,
+					rt, tc.cfg, tc.evmEvent, tc.service, tc.eventName, tc.data,
 				)
 
 				if tc.wantErr {
