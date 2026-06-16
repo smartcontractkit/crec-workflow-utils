@@ -42,7 +42,7 @@ func InitEventListenerWorkflow(
 		return nil, fmt.Errorf("invalid chain selector: %w", err)
 	}
 
-	executionHandlers := make([]cre.ExecutionHandler[*Config, cre.Runtime], len(*cfg.ConfidenceLevels))
+	var executionHandlers []cre.ExecutionHandler[*Config, cre.Runtime]
 
 	for _, confidenceStr := range *cfg.ConfidenceLevels {
 		confidence, err := ConfidenceLevelFromString(confidenceStr)
