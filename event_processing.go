@@ -20,6 +20,10 @@ import (
 	"github.com/smartcontractkit/crec-api-go/models"
 )
 
+// CourierOnchainWatcherEventsPath is the Courier system API path for posting signed
+// verifiable events from CRE workflows. It is appended to cfg.CourierURL (base URL).
+const CourierOnchainWatcherEventsPath = "/system/v1/onchain-watcher-events"
+
 // GetEventNameFromLog identifies the event name matching the log's topic hash
 // by checking against the list of configured ContractEventNames and the ABI.
 func GetEventNameFromLog(cfg *Config, payload *evm.Log, abiJSON string) (string, error) {
@@ -121,7 +125,7 @@ func BuildVerifiableEventForEVMEvent(
 }
 
 // SignAndPostVerifiableEvent performs identical-consensus report generation and posts the signed event
-// to the Courier /onchain-watcher-events endpoint. It returns the base64-encoded verifiable event.
+// to the Courier system API ([CourierOnchainWatcherEventsPath]). It returns the base64-encoded verifiable event.
 func SignAndPostVerifiableEvent(rt cre.Runtime, cfg *Config, ve *models.VerifiableEvent) (string, error) {
 	encodedVerifiableEvent, err := EncodeVerifiableEvent(ve)
 	if err != nil {
@@ -162,15 +166,19 @@ func SignAndPostVerifiableEvent(rt cre.Runtime, cfg *Config, ve *models.Verifiab
 	body, _ := json.Marshal(bodyMap)
 
 	client := &httpcap.Client{}
+	logger := rt.Logger()
+	url := strings.TrimRight(cfg.CourierURL, "/") + CourierOnchainWatcherEventsPath
 
 	// Retry only the network request, not the entire event processing/signing.
-	_, err = Retry(slog.Default(), "post_verifiable_event", nil, func() (int, error) {
-		url := strings.TrimRight(cfg.CourierURL, "/") + "/system/v1/onchain-watcher-events"
+	_, err = Retry(logger, "post_verifiable_event", nil, func() (int, error) {
 		return httpcap.SendRequest(
 			cfg,
 			rt,
 			client,
-			func(_ *Config, _ *slog.Logger, sr *httpcap.SendRequester) (int, error) {
+			func(_ *Config, nodeLogger *slog.Logger, sr *httpcap.SendRequester) (int, error) {
+				if nodeLogger != nil {
+					nodeLogger.Info("sending HTTP request", "url", url, "method", "POST", "watcher_id", cfg.WatcherID)
+				}
 				headers := map[string]string{
 					"Content-Type": "application/json",
 				}
@@ -182,23 +190,35 @@ func SignAndPostVerifiableEvent(rt cre.Runtime, cfg *Config, ve *models.Verifiab
 				}
 				resp, err := sr.SendRequest(req).Await()
 				if err != nil {
-					return 0, err
+					if nodeLogger != nil {
+						nodeLogger.Error("HTTP request failed", "url", url, "method", "POST", "error", err)
+					}
+					return 0, fmt.Errorf("HTTP request to %s failed: %w", url, err)
 				}
 				if resp == nil {
-					return 0, fmt.Errorf("nil response")
+					if nodeLogger != nil {
+						nodeLogger.Error("HTTP request returned nil response", "url", url, "method", "POST")
+					}
+					return 0, fmt.Errorf("nil response from courier API for url %s", url)
 				}
 				if resp.StatusCode >= 400 {
-					err := fmt.Errorf("courier API responded with status %d when trying to hit url %s", resp.StatusCode, url)
+					err := fmt.Errorf("courier API responded with status %d for url %s", resp.StatusCode, url)
+					if nodeLogger != nil {
+						nodeLogger.Error("HTTP request returned error status", "url", url, "method", "POST", "status_code", resp.StatusCode)
+					}
 					if resp.StatusCode < 500 && resp.StatusCode != 408 && resp.StatusCode != 429 {
 						return 0, StopRetry(err)
 					}
 					return 0, err
 				}
+				if nodeLogger != nil {
+					nodeLogger.Info("HTTP request succeeded", "url", url, "method", "POST", "status_code", resp.StatusCode)
+				}
 				return int(resp.StatusCode), nil
 			},
 			cre.ConsensusIdenticalAggregation[int](),
 		).Await()
-	})
+	}, "url", url, "watcher_id", cfg.WatcherID)
 	if err != nil {
 		return "", err
 	}
@@ -343,13 +363,13 @@ func MustEvent(abiJSON, eventName string) gethAbi.Event {
 }
 
 // CheckResponse validates the httpcap response and returns it unchanged if acceptable.
-func CheckResponse(resp *httpcap.Response) (*httpcap.Response, error) {
+func CheckResponse(url string, resp *httpcap.Response) (*httpcap.Response, error) {
 	if resp == nil {
-		return nil, fmt.Errorf("nil response")
+		return nil, fmt.Errorf("nil response from courier API for url %s", url)
 	}
 	// Treat any 4xx/5xx as an error (caller may retry).
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("courier API responded with status %d", resp.StatusCode)
+		return nil, fmt.Errorf("courier API responded with status %d for url %s", resp.StatusCode, url)
 	}
 	return resp, nil
 }

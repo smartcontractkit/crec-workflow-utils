@@ -77,7 +77,7 @@ func jitter(d time.Duration) time.Duration {
 // It uses an exponential backoff strategy with jitter (±25%); the starting delay comes from rc (see [RetryConfig]).
 // If the operation fails after all attempts are exhausted, it returns the last error wrapped with context.
 // It stops retrying immediately if the function returns an error wrapped with StopRetry.
-func Retry[T any](logger *slog.Logger, name string, rc *RetryConfig, fn func() (T, error)) (T, error) {
+func Retry[T any](logger *slog.Logger, name string, rc *RetryConfig, fn func() (T, error), logAttrs ...any) (T, error) {
 	attempts, delayDuration := resolveRetry(rc)
 	var val T
 	var err error
@@ -85,7 +85,7 @@ func Retry[T any](logger *slog.Logger, name string, rc *RetryConfig, fn func() (
 		if i > 0 {
 			jitteredDelay := jitter(delayDuration)
 			if logger != nil {
-				logger.Info("retrying operation", "operation", name, "attempt", i+1, "delay", jitteredDelay)
+				logger.Info("retrying operation", append([]any{"operation", name, "attempt", i+1, "delay", jitteredDelay}, logAttrs...)...)
 			}
 			time.Sleep(jitteredDelay)
 			delayDuration *= 2
@@ -97,11 +97,14 @@ func Retry[T any](logger *slog.Logger, name string, rc *RetryConfig, fn func() (
 
 		var ne *nonRetriableError
 		if errors.As(err, &ne) {
+			if logger != nil {
+				logger.Warn("non-retriable error, stopping retry", append([]any{"operation", name, "error", ne.Unwrap()}, logAttrs...)...)
+			}
 			return val, ne.Unwrap()
 		}
 
 		if logger != nil {
-			logger.Warn("operation failed", "operation", name, "error", err)
+			logger.Warn("operation failed", append([]any{"operation", name, "attempt", i+1, "error", err}, logAttrs...)...)
 		}
 	}
 	return val, fmt.Errorf("%s failed after %d attempts: %w", name, attempts, err)

@@ -145,6 +145,8 @@ func TestSanitiseJSON_AdditionalCases(t *testing.T) {
 }
 
 func TestEventProcessing_CheckResponse(t *testing.T) {
+	testURL := "https://courier.example.com" + CourierOnchainWatcherEventsPath
+
 	testCases := []struct {
 		name        string
 		resp        *httpcap.Response
@@ -155,6 +157,7 @@ func TestEventProcessing_CheckResponse(t *testing.T) {
 			name:    "returns nil for nil response",
 			resp:    nil,
 			wantErr: true,
+			errContains: testURL,
 		},
 		{
 			name:        "returns error for 400 status",
@@ -198,12 +201,15 @@ func TestEventProcessing_CheckResponse(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := CheckResponse(tc.resp)
+			result, err := CheckResponse(testURL, tc.resp)
 
 			if tc.wantErr {
 				require.Error(t, err)
 				if tc.errContains != "" {
 					assert.Contains(t, err.Error(), tc.errContains)
+				}
+				if tc.resp != nil && tc.resp.StatusCode >= 400 {
+					assert.Contains(t, err.Error(), testURL)
 				}
 				return
 			}

@@ -65,7 +65,7 @@ func TestRetry(t *testing.T) {
 			return "", StopRetry(expectedErr)
 		}
 
-		val, err := Retry(logger, "test-stop-retry", fastRetry, fn)
+		val, err := Retry(logger, "test-stop-retry", fastRetry, fn, "url", "https://example.com")
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Equal(t, "", val)
