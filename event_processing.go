@@ -226,19 +226,28 @@ func SignAndPostVerifiableEvent(rt cre.Runtime, cfg *Config, ve *models.Verifiab
 	return encodedVerifiableEvent, nil
 }
 
-// toSnakeCase converts "CamelCase" -> "camel_case".
+// toSnakeCase converts "CamelCase" -> "camel_case". A run of capitals is
+// treated as a single word, so acronym suffixes survive:
+// "referenceID" -> "reference_id", "fundTokenId" -> "fund_token_id".
+// The keys must match the ones the crec-sdk-ext-* event decoders read from
+// params (e.g. params["reference_id"]).
 func toSnakeCase(in string) string {
 	var b strings.Builder
-	for i, r := range in {
-		if 'A' <= r && r <= 'Z' {
-			if i != 0 {
+	for i := 0; i < len(in); i++ {
+		c := in[i]
+		if 'A' <= c && c <= 'Z' {
+			if i != 0 && (isLowerOrDigit(in[i-1]) || (i+1 < len(in) && isLowerOrDigit(in[i+1]))) {
 				b.WriteByte('_')
 			}
-			r += 32
+			c += 32
 		}
-		b.WriteRune(r)
+		b.WriteByte(c)
 	}
 	return b.String()
+}
+
+func isLowerOrDigit(c byte) bool {
+	return ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')
 }
 
 // toHexIfB64 converts 20 or 32-byte base64 into 0x-hex.
