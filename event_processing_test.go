@@ -249,11 +249,20 @@ func TestEventProcessing_toSnakeCase(t *testing.T) {
 	}{
 		{"CamelCase", "camel_case"},
 		{"alreadyLower", "already_lower"},
-		{"ABC", "a_b_c"},
+		{"ABC", "abc"},
 		{"simple", "simple"},
 		{"TwoWords", "two_words"},
 		{"", ""},
 		{"A", "a"},
+		// Acronym suffixes must stay one word so the keys match the
+		// crec-sdk-ext-* decoders (params["reference_id"]).
+		{"referenceID", "reference_id"},
+		{"ReferenceID", "reference_id"},
+		{"fundTokenId", "fund_token_id"},
+		{"fundAdminAddr", "fund_admin_addr"},
+		{"DTASettlementOpened", "dta_settlement_opened"},
+		{"HTTPRequestID", "http_request_id"},
+		{"param1ID", "param1_id"},
 	}
 
 	for _, tc := range testCases {
