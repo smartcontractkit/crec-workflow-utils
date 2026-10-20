@@ -5,8 +5,8 @@ go 1.26.3
 require (
 	github.com/ethereum/go-ethereum v1.17.0
 	github.com/oapi-codegen/runtime v1.1.2 // indirect
-	github.com/smartcontractkit/chainlink-protos/cre/go v0.0.0-20251211142334-5c3421fe2c8d
-	github.com/smartcontractkit/cre-sdk-go v1.1.2
+	github.com/smartcontractkit/chainlink-protos/cre/go v0.0.0-20260217043601-5cc966896c4f
+	github.com/smartcontractkit/cre-sdk-go v1.7.0
 	github.com/smartcontractkit/cre-sdk-go/capabilities/blockchain/evm v0.10.0
 	github.com/smartcontractkit/cre-sdk-go/capabilities/networking/http v0.10.0
 	github.com/smartcontractkit/crec-api-go v0.7.3
